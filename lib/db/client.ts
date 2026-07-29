@@ -1,10 +1,6 @@
 import "server-only";
 
-import {
-  DuckDBConnection,
-  DuckDBInstance,
-  timestampValue,
-} from "@duckdb/node-api";
+import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import type { LLMRequest } from "../types";
 import { MODELS } from "../models";
 import { generateRange } from "../generator";
@@ -67,6 +63,34 @@ const STORE_KEY = Symbol.for("tokenwatch.store");
 type GlobalWithStore = typeof globalThis & { [STORE_KEY]?: Promise<Store> };
 const g = globalThis as GlobalWithStore;
 
+/**
+ * Load the DuckDB driver on first use rather than at module load.
+ *
+ * The driver pulls in a large native addon. Importing it at the top of this
+ * module means the *route module itself* fails to load when the binding cannot
+ * be resolved — and a module that fails to load never reaches any error
+ * handling, so the platform returns an opaque HTML 500 with the real cause
+ * visible only in provider logs. That is exactly how the first deployment
+ * failed, and why it took several guesses to get nowhere.
+ *
+ * Deferring the import moves the failure inside a request, where it can be
+ * caught, wrapped, and returned as a readable JSON error.
+ */
+type DuckDBModule = typeof import("@duckdb/node-api");
+let driver: Promise<DuckDBModule> | undefined;
+
+function loadDriver(): Promise<DuckDBModule> {
+  driver ??= import("@duckdb/node-api").catch((err: unknown) => {
+    driver = undefined; // let a later request retry instead of caching the failure
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to load the DuckDB native binding for ${process.platform}-${process.arch}: ${cause}`,
+      { cause: err },
+    );
+  });
+  return driver;
+}
+
 async function bootstrap(connection: DuckDBConnection): Promise<void> {
   await connection.run(DDL);
   await connection.run(VIEWS);
@@ -96,6 +120,7 @@ async function appendRequests(
 ): Promise<void> {
   if (rows.length === 0) return;
 
+  const { timestampValue } = await loadDriver();
   const appender = await connection.createAppender("requests");
   try {
     for (const r of rows) {
@@ -120,10 +145,11 @@ async function appendRequests(
 }
 
 async function createStore(): Promise<Store> {
+  const duckdb = await loadDriver();
   // DUCKDB_SETTINGS pins temp dir, memory, threads and extension loading —
   // DuckDB's defaults are derived from the host machine and are actively wrong
   // inside a function container. See lib/config.ts for why each one matters.
-  const instance = await DuckDBInstance.create(DB_PATH, DUCKDB_SETTINGS);
+  const instance = await duckdb.DuckDBInstance.create(DB_PATH, DUCKDB_SETTINGS);
   const writer = await instance.connect();
   await bootstrap(writer);
 
@@ -237,7 +263,8 @@ export async function createTestStore(
   to: number,
   opts: { ratePerMin?: number; seed?: number } = {},
 ): Promise<{ instance: DuckDBInstance; connection: DuckDBConnection }> {
-  const instance = await DuckDBInstance.create(":memory:", DUCKDB_SETTINGS);
+  const duckdb = await loadDriver();
+  const instance = await duckdb.DuckDBInstance.create(":memory:", DUCKDB_SETTINGS);
   const connection = await instance.connect();
   await bootstrap(connection);
   await appendRequests(
