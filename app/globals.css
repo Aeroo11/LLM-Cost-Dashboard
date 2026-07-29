@@ -1,34 +1,120 @@
 @import "tailwindcss";
 
-/* ── Design tokens ──────────────────────────────────────────── */
+/* ── Design tokens ──────────────────────────────────────────────
+   Two layers on purpose. `:root` holds the literal values; `@theme inline`
+   only *aliases* them, so utilities resolve through var(--bg) rather than a
+   copy. A token belongs in @theme iff we want Tailwind to mint a utility from
+   it — anything read only through var() in CSS or through an inline SVG style
+   stays in :root, or we ship dead classes nothing purges.
+   ──────────────────────────────────────────────────────────────── */
 :root {
+  /* Planes — a four-step elevation ladder. */
   --bg: #0a0b0f;
   --surface: #13151c;
   --surface-2: #1a1d26;
+  --surface-3: #22262f;
   --border: #262a35;
+  --border-strong: #333949;
+
+  /* Ink — three steps, so footnotes stop borrowing opacity modifiers. */
   --text: #e7e9ee;
   --text-muted: #9aa0ad;
+  --text-subtle: #6b7280;
+
   --accent: #6366f1;
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+
+  /* Severity — the reserved *status* palette. Deliberately distinct from the
+     categorical series colours so a status hue never impersonates a series,
+     and distinct from --warning/--danger, which are UI chrome. Mirrored in
+     lib/palette.ts for SVG; lib/palette.test.ts asserts the two agree. */
+  --sev-high: #ec835a;
+  --sev-medium: #fab219;
+  --sev-low: #9aa0ad;
+
+  /* Diverging pair (blue ↔ red, dark steps) for above/below-baseline bars. */
+  --div-under: #3987e5;
+  --div-over: #e66767;
+
+  /* Chart chrome. SVG attributes need literal hex, so lib/palette.ts owns the
+     values these mirror. */
+  --chart-grid: #262a35;
+  --chart-axis: #9aa0ad;
+  --chart-ink: #e7e9ee;
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
   --color-accent: var(--accent);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-sev-high: var(--sev-high);
+  --color-sev-medium: var(--sev-medium);
+  --color-sev-low: var(--sev-low);
+  --color-div-under: var(--div-under);
+  --color-div-over: var(--div-over);
+
+  /* Radius — panels sit one step above controls, controls above chips. */
+  --radius-panel: 0.875rem;
+  --radius-control: 0.5rem;
+
+  /* Elevation. On a dark plane a drop shadow alone reads as mud; the inset
+     top highlight is what actually creates the raised read. */
+  --shadow-panel: inset 0 1px 0 0 rgb(255 255 255 / 0.03), 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-raised: inset 0 1px 0 0 rgb(255 255 255 / 0.05), 0 12px 32px -8px rgb(0 0 0 / 0.65);
+  --shadow-pop: 0 16px 40px -12px rgb(0 0 0 / 0.8);
+
+  /* Type scale. --text-eyebrow replaces the scattered text-[10px]/text-[11px]. */
+  --text-hero: 3rem;
+  --text-hero--line-height: 1;
+  --text-hero--letter-spacing: -0.025em;
+  --text-stat: 1.75rem;
+  --text-stat--line-height: 1.1;
+  --text-stat--letter-spacing: -0.02em;
+  --text-eyebrow: 0.6875rem;
+  --text-eyebrow--line-height: 1;
+  --text-eyebrow--letter-spacing: 0.06em;
+
   /* The inner fallback is load-bearing: without it, a missing font variable
      invalidates the whole declaration rather than falling through to the list. */
   --font-sans: var(--font-geist-sans, ui-sans-serif), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono, ui-monospace), ui-monospace, monospace;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-rise: rise 320ms var(--ease-out-quint) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+}
+
+/* @keyframes live outside @theme; --animate-* references them by name. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
 }
 
 html {
@@ -40,4 +126,17 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Also neuters the live indicator's animate-ping, which is the one piece of
+   motion that runs indefinitely. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

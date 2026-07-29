@@ -1,4 +1,5 @@
 import { formatDelta } from "@/lib/format";
+import { Card } from "./ui/card";
 
 export interface KpiCardProps {
   label: string;
@@ -39,11 +40,7 @@ export function KpiCard({
   loading = false,
 }: KpiCardProps) {
   return (
-    <div
-      className={`rounded-xl border border-border bg-surface p-5 ${
-        accent ? "ring-1 ring-accent/40" : ""
-      }`}
-    >
+    <Card className={accent ? "ring-1 ring-accent/40" : undefined}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium uppercase tracking-wide text-text-muted">
           {label}
@@ -62,6 +59,6 @@ export function KpiCard({
       </div>
 
       {sub && <p className="mt-1 text-xs text-text-muted">{sub}</p>}
-    </div>
+    </Card>
   );
 }

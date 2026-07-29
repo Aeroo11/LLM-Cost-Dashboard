@@ -4,6 +4,8 @@ import { MODELS } from "@/lib/models";
 import { MODEL_COLORS, MODEL_ORDER } from "@/lib/palette";
 import { ENDPOINT_IDS, STATUS_IDS, type MetricFilters } from "@/lib/db/filters";
 import type { FilterDimension } from "@/hooks/use-dashboard-state";
+import { cn } from "@/lib/cn";
+import { Card } from "./ui/card";
 
 const STATUS_LABEL: Record<string, string> = {
   success: "success",
@@ -26,7 +28,7 @@ export function FilterBar({
   onClear: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface px-4 py-3">
+    <Card padded={false} className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <Group label="Model">
           {MODEL_ORDER.map((id) => (
@@ -82,14 +84,14 @@ export function FilterBar({
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-wide text-text-muted">
+      <span className="text-eyebrow uppercase text-text-muted">
         {label}
       </span>
       <div className="flex flex-wrap gap-1.5">{children}</div>
@@ -113,11 +115,13 @@ function Chip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
+        "transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
         active
           ? "border-accent/60 bg-accent/15 text-text"
-          : "border-border text-text-muted hover:border-text-muted/50 hover:text-text"
-      }`}
+          : "border-border text-text-muted hover:border-border-strong hover:text-text",
+      )}
     >
       {color && (
         <span

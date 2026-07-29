@@ -13,7 +13,9 @@ import {
 } from "@/lib/format";
 import { useDashboardState } from "@/hooks/use-dashboard-state";
 import { useMetricsStream, type ConnectionState } from "@/hooks/use-metrics-stream";
+import { cn } from "@/lib/cn";
 import { KpiCard } from "./kpi-card";
+import { Card } from "./ui/card";
 import { Panel, LegendDot } from "./panel";
 import { InsightsPanel } from "./insights-panel";
 import { AlertsPanel } from "./alerts-panel";
@@ -106,14 +108,14 @@ export function Dashboard() {
         />
       </section>
 
-      <section className="mt-4 flex flex-wrap gap-x-6 gap-y-2 rounded-xl border border-border bg-surface px-5 py-3 text-sm">
+      <Card as="section" padded={false} className="mt-4 flex flex-wrap gap-x-6 gap-y-2 px-5 py-3 text-sm">
         <Meta label="p50" value={s ? formatMs(s.latencyP50) : "—"} />
         <Meta label="p95" value={s ? formatMs(s.latencyP95) : "—"} />
         <Meta label="p99" value={s ? formatMs(s.latencyP99) : "—"} />
         <Meta label="Tokens in" value={s ? formatTokens(s.totalInputTokens) : "—"} />
         <Meta label="Tokens out" value={s ? formatTokens(s.totalOutputTokens) : "—"} />
         <Meta label="Cached" value={s ? formatTokens(s.totalCachedTokens) : "—"} />
-      </section>
+      </Card>
 
       {loading || !data || !s ? (
         <section className="mt-4 rounded-xl border border-dashed border-border bg-surface/40 px-5 py-20 text-center text-sm text-text-muted">
@@ -216,16 +218,18 @@ function WindowToggle({
   onChange: (k: WindowKey) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
+    <div className="inline-flex rounded-control border border-border bg-surface p-0.5 shadow-panel">
       {WINDOW_KEYS.map((key) => (
         <button
           key={key}
           type="button"
           onClick={() => onChange(key)}
           aria-pressed={value === key}
-          className={`rounded-md px-3 py-1 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-            value === key ? "bg-surface-2 text-text" : "text-text-muted hover:text-text"
-          }`}
+          className={cn(
+            "rounded-[calc(var(--radius-control)-2px)] px-3 py-1 text-sm font-medium",
+            "transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            value === key ? "bg-surface-2 text-text" : "text-text-muted hover:text-text",
+          )}
         >
           {WINDOWS[key].label}
         </button>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Card } from "./ui/card";
 
 export function Panel({
   title,
@@ -14,7 +15,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <div className={`rounded-xl border border-border bg-surface p-5 ${className}`}>
+    <Card className={className}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
@@ -23,7 +24,7 @@ export function Panel({
         {action}
       </div>
       {children}
-    </div>
+    </Card>
   );
 }
 
