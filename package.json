@@ -6,21 +6,30 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "node --experimental-strip-types scripts/seed.ts",
+    "verify": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
-    "next": "^16.2.10",
+    "@duckdb/node-api": "^1.5.5-r.2",
+    "next": "^16.2.12",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "recharts": "^3.9.2"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
     "tailwindcss": "^4.3.2",
-    "typescript": "7.0.2"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }

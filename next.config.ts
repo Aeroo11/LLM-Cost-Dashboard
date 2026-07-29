@@ -7,13 +7,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve("."),
   },
-  typescript: {
-    // Next's build-time TS check misdetects the workspace root (a stray
-    // package.json/node_modules exists in the home directory) and tries to
-    // auto-install typescript, which crashes. We gate types ourselves via
-    // `npm run typecheck` (tsc --noEmit) instead, which passes cleanly.
-    ignoreBuildErrors: true,
-  },
+  // DuckDB ships a native addon; it must stay external to the server bundle
+  // rather than being traced and rewritten by the bundler.
+  serverExternalPackages: ["@duckdb/node-api", "@duckdb/node-bindings"],
 };
 
 export default nextConfig;
