@@ -4,13 +4,7 @@ import { useEffect, useState } from "react";
 import { WINDOWS, WINDOW_KEYS, type WindowKey } from "@/lib/api-types";
 import { MODELS } from "@/lib/models";
 import { MODEL_COLORS, MODEL_ORDER } from "@/lib/palette";
-import {
-  formatInt,
-  formatMs,
-  formatPercent,
-  formatTokens,
-  formatUsd,
-} from "@/lib/format";
+import { formatInt, formatPercent, formatUsd } from "@/lib/format";
 import { useDashboardState } from "@/hooks/use-dashboard-state";
 import { useMetricsStream, type ConnectionState } from "@/hooks/use-metrics-stream";
 import { cn } from "@/lib/cn";
@@ -28,7 +22,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { StatTile } from "./ui/stat-tile";
-import { Card } from "./ui/card";
+import { LatencyCard } from "./latency-card";
+import { TokenFlowCard } from "./token-flow-card";
 import { Panel, LegendDot } from "./panel";
 import { InsightsPanel } from "./insights-panel";
 import { AlertsPanel } from "./alerts-panel";
@@ -139,21 +134,17 @@ export function Dashboard() {
         />
       </section>
 
-      <Card as="section" padded={false} className="mt-4 flex flex-wrap gap-x-6 gap-y-2 px-5 py-3 text-sm">
-        <Meta label="p50" value={s ? formatMs(s.latencyP50) : "—"} />
-        <Meta label="p95" value={s ? formatMs(s.latencyP95) : "—"} />
-        <Meta label="p99" value={s ? formatMs(s.latencyP99) : "—"} />
-        <Meta label="Tokens in" value={s ? formatTokens(s.totalInputTokens) : "—"} />
-        <Meta label="Tokens out" value={s ? formatTokens(s.totalOutputTokens) : "—"} />
-        <Meta label="Cached" value={s ? formatTokens(s.totalCachedTokens) : "—"} />
-      </Card>
-
       {loading || !data || !s ? (
         <section className="mt-4 rounded-xl border border-dashed border-border bg-surface/40 px-5 py-20 text-center text-sm text-text-muted">
           Connecting to the metrics stream…
         </section>
       ) : (
         <>
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <LatencyCard summary={s} />
+            <TokenFlowCard summary={s} />
+          </div>
+
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <InsightsPanel insights={data.insights} savings={data.savings} />
             <AlertsPanel anomalies={data.anomalies} />
@@ -232,15 +223,6 @@ function ModelLegend() {
       {MODEL_ORDER.map((m) => (
         <LegendDot key={m} color={MODEL_COLORS[m]} label={MODELS[m].label} />
       ))}
-    </div>
-  );
-}
-
-function Meta({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <span className="text-text-muted">{label}</span>
-      <span className="font-medium tabular-nums">{value}</span>
     </div>
   );
 }

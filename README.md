@@ -334,6 +334,17 @@ weekend-scale project:
   own query pass every two seconds. A shared computation fanned out to
   subscribers would scale further.
 - **Dark theme only.** No light mode yet.
+- **Latency has no time series.** `TimeBucket` (`lib/aggregate.ts`) carries cost
+  and request count per bucket, not latency, so the dashboard can only show p50
+  / p95 / p99 for the window as a whole — a quantile strip, which plots the
+  three known points and interpolates nothing. A real latency-over-time chart
+  needs `latencyP95` added to the bucket and a `quantile_cont(latency_ms, 0.95)`
+  in the time-series `GROUP BY`.
+- **Drilling into an endpoint hides the others.** `queryEndpointMatrix` applies
+  the endpoint filter, so clicking a bar in "Cost by endpoint" drops the
+  remaining endpoints from the payload instead of letting them recede. Keeping
+  the chart you filter *by* fully populated would mean not passing
+  `filters.endpoints` to that one query.
 - **Quality is synthetic.** `qualityScore` is a generated proxy, not a real
   evaluation. Wiring in an actual eval harness is the most valuable next step.
 
