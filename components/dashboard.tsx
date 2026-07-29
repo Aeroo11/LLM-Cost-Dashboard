@@ -14,8 +14,20 @@ import {
 import { useDashboardState } from "@/hooks/use-dashboard-state";
 import { useMetricsStream, type ConnectionState } from "@/hooks/use-metrics-stream";
 import { cn } from "@/lib/cn";
-import { Cpu, Gauge, Network, Table2, TrendingUp } from "lucide-react";
-import { KpiCard } from "./kpi-card";
+import { toSparkline, toSparklineRequests } from "@/lib/series";
+import {
+  Activity,
+  Cpu,
+  DollarSign,
+  Flame,
+  Gauge,
+  Network,
+  Receipt,
+  Table2,
+  TrendingUp,
+  TriangleAlert,
+} from "lucide-react";
+import { StatTile } from "./ui/stat-tile";
 import { Card } from "./ui/card";
 import { Panel, LegendDot } from "./panel";
 import { InsightsPanel } from "./insights-panel";
@@ -74,37 +86,55 @@ export function Dashboard() {
         />
       </section>
 
-      {/* KPI row */}
-      <section className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
+      {/* Total Cost is the hero: one number the view leads with, at display
+          size, with the other four reading as its supporting cast. */}
+      <section className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-2">
+        <StatTile
+          size="hero"
+          className="lg:col-span-2 lg:row-span-2"
           label="Total Cost"
           value={s ? formatUsd(s.totalCostUsd) : "—"}
           sub={`over the last ${WINDOWS[windowKey].label}`}
           deltaPct={d?.totalCostPct}
           invertDelta
-          accent
+          icon={DollarSign}
+          trend={s ? toSparkline(s.timeSeries) : undefined}
           loading={loading}
         />
-        <KpiCard
+        <StatTile
           label="Burn Rate"
           value={s ? formatUsd(s.burnRateMonthlyUsd) : "—"}
           sub="projected 30-day spend"
+          icon={Flame}
           loading={loading}
         />
-        <KpiCard
+        {/* The one metric where up is not bad — the only tile without
+            invertDelta, which is what makes the colouring read as deliberate. */}
+        <StatTile
+          label="Requests"
+          value={s ? formatInt(s.totalRequests) : "—"}
+          sub="matching the current filters"
+          deltaPct={d?.requestsPct}
+          icon={Activity}
+          trend={s ? toSparklineRequests(s.timeSeries) : undefined}
+          loading={loading}
+        />
+        <StatTile
           label="Avg Cost / Request"
           value={s ? formatUsd(s.avgCostPerRequest) : "—"}
-          sub={s ? `${formatInt(s.totalRequests)} requests` : undefined}
+          sub="across every model"
           deltaPct={d?.avgCostPct}
           invertDelta
+          icon={Receipt}
           loading={loading}
         />
-        <KpiCard
+        <StatTile
           label="Error Rate"
           value={s ? formatPercent(s.errorRate) : "—"}
           sub="failed / rate-limited / timeout"
           deltaPct={d?.errorRatePct}
           invertDelta
+          icon={TriangleAlert}
           loading={loading}
         />
       </section>
