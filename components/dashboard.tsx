@@ -24,6 +24,11 @@ import {
 import { StatTile } from "./ui/stat-tile";
 import { LatencyCard } from "./latency-card";
 import { EndpointEconomics } from "./endpoint-economics";
+import {
+  ChartSkeleton,
+  PanelSkeleton,
+  TableSkeleton,
+} from "./ui/skeleton";
 import { TokenFlowCard } from "./token-flow-card";
 import { Panel, LegendDot } from "./panel";
 import { InsightsPanel } from "./insights-panel";
@@ -47,7 +52,7 @@ export function Dashboard() {
     clearFilters,
   } = useDashboardState();
 
-  const { data, status, lastUpdateMs, error } = useMetricsStream(queryString);
+  const { data, stale, status, lastUpdateMs, error } = useMetricsStream(queryString);
 
   const s = data?.summary;
   const d = data?.deltas;
@@ -136,11 +141,36 @@ export function Dashboard() {
       </section>
 
       {loading || !data || !s ? (
-        <section className="mt-4 rounded-xl border border-dashed border-border bg-surface/40 px-5 py-20 text-center text-sm text-text-muted">
-          Connecting to the metrics stream…
-        </section>
+        // Per-panel shapes at the real heights, so nothing shifts when the
+        // first frame lands. The single dashed box this replaces collapsed the
+        // whole lower page into 160px and then jumped it back open.
+        <div className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PanelSkeleton lines={2} />
+            <PanelSkeleton lines={2} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PanelSkeleton lines={3} />
+            <PanelSkeleton lines={3} />
+          </div>
+          <ChartSkeleton height={260} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <ChartSkeleton height={240} />
+            <ChartSkeleton height={260} />
+          </div>
+          <TableSkeleton />
+        </div>
       ) : (
-        <>
+        // Stale = the window or filters changed and this frame answers the
+        // previous query. Hold it at reduced opacity rather than flashing a
+        // skeleton — same treatment the simulator already gives its pending
+        // state, so the pattern reads as deliberate.
+        <div
+          className={cn(
+            "animate-rise transition-opacity duration-200",
+            stale && "opacity-60",
+          )}
+        >
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <LatencyCard summary={s} />
             <TokenFlowCard summary={s} />
@@ -207,7 +237,7 @@ export function Dashboard() {
           >
             <RequestsTable queryString={queryString} />
           </Panel>
-        </>
+        </div>
       )}
 
       <footer className="mt-8 space-y-1 text-center text-xs text-text-muted">
