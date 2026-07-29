@@ -202,6 +202,49 @@ async function queryTimeSeries(
   return spine;
 }
 
+export interface EndpointModelCell {
+  endpoint: Endpoint;
+  model: ModelId;
+  costUsd: number;
+  requests: number;
+}
+
+/**
+ * Cost broken down by endpoint *and* model.
+ *
+ * The single most diagnostic view in the dashboard, and the one the original
+ * version computed and then never rendered: it is where over-provisioned
+ * routing becomes visible — a cheap, high-volume workload with an expensive
+ * model taking a large slice of its bar.
+ */
+export async function queryEndpointMatrix(
+  connection: DuckDBConnection,
+  range: TimeRange,
+  filters: MetricFilters,
+): Promise<EndpointModelCell[]> {
+  const p = buildPredicate(range, filters);
+  const rows = await all(
+    connection,
+    /* sql */ `
+      SELECT endpoint, model,
+             coalesce(sum(cost_usd), 0) AS cost_usd,
+             count(*)                   AS requests
+      FROM v_requests
+      WHERE ${p.sql}
+      GROUP BY 1, 2
+      ORDER BY 1, 2
+    `,
+    p.params,
+  );
+
+  return rows.map((r) => ({
+    endpoint: String(r.endpoint) as Endpoint,
+    model: String(r.model) as ModelId,
+    costUsd: num(r.cost_usd),
+    requests: num(r.requests),
+  }));
+}
+
 export interface WindowTotals {
   totalCostUsd: number;
   totalRequests: number;

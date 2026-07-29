@@ -2,6 +2,7 @@ import type { Summary } from "./aggregate";
 import type { Insight, SavingsBreakdown } from "./insights";
 import type { MetricFilters } from "./db/filters";
 import type { Anomaly } from "./db/anomalies";
+import type { EndpointModelCell } from "./db/queries";
 
 /** Selectable observation windows. */
 export type WindowKey = "1h" | "24h" | "7d";
@@ -24,6 +25,8 @@ export function parseWindowKey(raw: string | null): WindowKey {
 /** Payload returned by GET /api/metrics and pushed over /api/stream. */
 export interface MetricsResponse {
   generatedAt: number;
+  /** Epoch ms up to which events have been ingested — the stream's "as of". */
+  ingestHeadMs: number;
   windowKey: WindowKey;
   windowHours: number;
   /** Window bounds actually queried, so the client need not recompute them. */
@@ -43,4 +46,6 @@ export interface MetricsResponse {
   savings: SavingsBreakdown;
   /** Statistical outliers in the bucketed series, most recent first. */
   anomalies: Anomaly[];
+  /** Cost cross-tabbed by endpoint and model — where routing leaks show up. */
+  endpointMatrix: EndpointModelCell[];
 }

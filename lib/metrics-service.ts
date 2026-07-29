@@ -1,7 +1,7 @@
 import "server-only";
 
-import { withConnection } from "./db/client";
-import { querySummary, queryTotals } from "./db/queries";
+import { storeHeadMs, withConnection } from "./db/client";
+import { queryEndpointMatrix, querySummary, queryTotals } from "./db/queries";
 import { queryInsights } from "./db/insights";
 import { queryAnomalies } from "./db/anomalies";
 import { totalMonthlySavings } from "./insights";
@@ -22,13 +22,39 @@ function pct(current: number, previous: number): number {
 }
 
 /**
- * Anchor the window to a whole minute. The store ingests in minute-sized
- * batches, so aligning to the same boundary keeps a query and the data it reads
- * consistent — and makes repeated calls within a minute return identical bytes.
+ * The trailing window as of `nowMs`.
+ *
+ * The upper bound is the live clock, so events ingested a second ago are
+ * included. The lower bound is snapped *down* to the bucket grid: if it slid
+ * continuously, every tick would re-cut the series at a different offset and
+ * the chart would shimmer as bars jumped between buckets. Snapping fixes bucket
+ * edges in absolute time, so the window slides one whole bucket at a time while
+ * the newest bucket fills up in real time — which is what a live chart should
+ * look like.
+ *
+ * The window is therefore up to one bucket longer than nominal. Everything
+ * downstream derives its span from the actual bounds rather than assuming the
+ * nominal length, so rates and projections stay correct.
  */
 export function currentRange(windowKey: WindowKey, nowMs = Date.now()): TimeRange {
-  const toMs = Math.floor(nowMs / MINUTE_MS) * MINUTE_MS;
-  return { fromMs: toMs - WINDOWS[windowKey].hours * 3600_000, toMs };
+  const { hours, bucketMinutes } = WINDOWS[windowKey];
+  const bucketMs = bucketMinutes * MINUTE_MS;
+  const fromMs = Math.floor((nowMs - hours * 3600_000) / bucketMs) * bucketMs;
+  return { fromMs, toMs: nowMs };
+}
+
+/**
+ * Cheap identity for a payload: changes exactly when the underlying data does.
+ * The stream uses it to avoid pushing frames that would be byte-identical.
+ */
+export function metricsFingerprint(payload: MetricsResponse): string {
+  const s = payload.summary;
+  return [
+    s.totalRequests,
+    s.totalCostUsd.toFixed(9),
+    s.timeSeries.length,
+    payload.anomalies.length,
+  ].join(":");
 }
 
 export async function buildMetrics(
@@ -46,12 +72,13 @@ export async function buildMetrics(
 
   // One borrowed connection for the whole payload: every query below reads the
   // same snapshot, so the KPI row can never disagree with the chart beneath it.
-  const { summary, prev, insights, anomalies } = await withConnection(
+  const { summary, prev, insights, anomalies, endpointMatrix } = await withConnection(
     async (connection) => {
-      const [summary, prev, anomalies] = await Promise.all([
+      const [summary, prev, anomalies, endpointMatrix] = await Promise.all([
         querySummary(connection, range, filters, bucketMinutes),
         queryTotals(connection, previous, filters),
         queryAnomalies(connection, range, filters, bucketMinutes),
+        queryEndpointMatrix(connection, range, filters),
       ]);
       // Depends on the burn rate, so it cannot join the batch above.
       const insights = await queryInsights(
@@ -60,12 +87,13 @@ export async function buildMetrics(
         filters,
         summary.burnRateMonthlyUsd,
       );
-      return { summary, prev, insights, anomalies };
+      return { summary, prev, insights, anomalies, endpointMatrix };
     },
   );
 
   return {
     generatedAt: range.toMs,
+    ingestHeadMs: await storeHeadMs(),
     windowKey,
     windowHours: hours,
     range,
@@ -80,5 +108,6 @@ export async function buildMetrics(
     insights,
     savings: totalMonthlySavings(insights),
     anomalies,
+    endpointMatrix,
   };
 }

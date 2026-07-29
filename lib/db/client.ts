@@ -7,7 +7,7 @@ import {
 } from "@duckdb/node-api";
 import type { LLMRequest } from "../types";
 import { MODELS } from "../models";
-import { generateRange, MINUTE_MS } from "../generator";
+import { generateRange } from "../generator";
 import { DB_PATH, RATE_PER_MIN, RETENTION_HOURS, SEED } from "../config";
 import { DDL, VIEWS } from "./schema";
 
@@ -42,7 +42,14 @@ interface Store {
   instance: DuckDBInstance;
   /** Reserved for ingest and pruning. Never handed to query code. */
   writer: DuckDBConnection;
-  /** Exclusive upper bound of ingested data, snapped to a minute boundary. */
+  /**
+   * Exclusive upper bound of ingested data, to the millisecond.
+   *
+   * Not snapped to a minute: `generateRange` honours exact bounds, so ingest
+   * runs in whatever slice of time has actually elapsed — a few seconds per
+   * tick. That is what makes the stream visibly live instead of stepping once
+   * a minute.
+   */
   headMs: number;
 }
 
@@ -53,10 +60,6 @@ interface Store {
 const STORE_KEY = Symbol.for("tokenwatch.store");
 type GlobalWithStore = typeof globalThis & { [STORE_KEY]?: Promise<Store> };
 const g = globalThis as GlobalWithStore;
-
-function floorToMinute(ms: number): number {
-  return Math.floor(ms / MINUTE_MS) * MINUTE_MS;
-}
 
 async function bootstrap(connection: DuckDBConnection): Promise<void> {
   await connection.run(DDL);
@@ -123,9 +126,11 @@ async function createStore(): Promise<Store> {
     (existing.getRowObjects()[0]?.head as bigint | undefined) ?? 0n,
   );
 
-  const now = floorToMinute(Date.now());
+  const now = Date.now();
   const horizon = now - RETENTION_HOURS * 3600_000;
-  const from = persistedHead > horizon ? persistedHead + MINUTE_MS : horizon;
+  // Resume from just after the newest persisted event, unless the file is so
+  // stale that everything in it has already aged out.
+  const from = persistedHead > horizon ? persistedHead + 1 : horizon;
 
   await appendRequests(
     writer,
@@ -149,15 +154,25 @@ function serialise(task: () => Promise<void>): Promise<void> {
   return run;
 }
 
+/**
+ * Smallest slice of time worth an ingest round-trip. Below this the appender
+ * overhead dominates and the UI cannot tell the difference anyway.
+ */
+const MIN_INGEST_MS = 1_000;
+
+/** How often to prune, so the DELETE does not run on every tick. */
+const PRUNE_INTERVAL_MS = 60_000;
+let lastPruneMs = 0;
+
 /** Bring the store up to the current wall clock. Idempotent and cheap. */
 async function refresh(store: Store): Promise<Store> {
-  if (floorToMinute(Date.now()) <= store.headMs) return store;
+  if (Date.now() - store.headMs < MIN_INGEST_MS) return store;
 
   await serialise(async () => {
     // Re-check inside the critical section: a queued caller may find the work
     // already done by the refresh it was waiting on.
-    const now = floorToMinute(Date.now());
-    if (now <= store.headMs) return;
+    const now = Date.now();
+    if (now - store.headMs < MIN_INGEST_MS) return;
 
     await appendRequests(
       store.writer,
@@ -168,10 +183,14 @@ async function refresh(store: Store): Promise<Store> {
         seed: SEED,
       }),
     );
-    await store.writer.run("DELETE FROM requests WHERE ts < epoch_ms($1::BIGINT)", [
-      now - RETENTION_HOURS * 3600_000,
-    ]);
     store.headMs = now;
+
+    if (now - lastPruneMs >= PRUNE_INTERVAL_MS) {
+      await store.writer.run("DELETE FROM requests WHERE ts < epoch_ms($1::BIGINT)", [
+        now - RETENTION_HOURS * 3600_000,
+      ]);
+      lastPruneMs = now;
+    }
   });
 
   return store;
@@ -222,4 +241,18 @@ export async function createTestStore(
     }),
   );
   return { instance, connection };
+}
+
+/**
+ * Number of events ingested since a given timestamp — the cheap "is there
+ * anything new?" check the stream uses before recomputing a payload.
+ */
+export async function countSince(sinceMs: number): Promise<number> {
+  return withConnection(async (connection) => {
+    const reader = await connection.runAndReadAll(
+      "SELECT count(*) AS n FROM requests WHERE ts >= epoch_ms($1::BIGINT)",
+      [sinceMs],
+    );
+    return Number(reader.getRowObjects()[0]?.n ?? 0);
+  });
 }

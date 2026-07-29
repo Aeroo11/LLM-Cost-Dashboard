@@ -103,9 +103,9 @@ export interface GenerateOptions {
 }
 
 export interface GenerateRangeOptions {
-  /** Start of the range, epoch ms (inclusive). Snapped down to the minute. */
+  /** Start of the range, epoch ms (inclusive). */
   from: number;
-  /** End of the range, epoch ms (exclusive). Snapped down to the minute. */
+  /** End of the range, epoch ms (exclusive). */
   to: number;
   ratePerMin: number;
   /** Base seed — combined with each minute's index to seed that minute. */
@@ -137,14 +137,85 @@ function diurnalFactor(timestamp: number): number {
 }
 
 /** Assign a status; timeouts/rate-limits are rarer and cluster at high load. */
-function pickStatus(rng: () => number, loadFactor: number): RequestStatus {
+function pickStatus(
+  rng: () => number,
+  loadFactor: number,
+  incident: Incident | null,
+): RequestStatus {
   const errorBoost = 0.5 + loadFactor; // busier ⇒ slightly more failures
+  const storm = incident?.kind === "error_storm" ? incident.magnitude : 0;
+
   return weightedPick<RequestStatus>(rng, [
-    ["success", 0.975],
-    ["error", 0.009 * errorBoost],
-    ["rate_limited", 0.009 * errorBoost],
-    ["timeout", 0.007 * errorBoost],
+    ["success", Math.max(0.05, 0.975 - storm)],
+    ["error", 0.009 * errorBoost + storm * 0.5],
+    ["rate_limited", 0.009 * errorBoost + storm * 0.3],
+    ["timeout", 0.007 * errorBoost + storm * 0.2],
   ]);
+}
+
+/* ── Incidents ──────────────────────────────────────────────────────────────
+ *
+ * Steady traffic makes for a dead dashboard and, more importantly, an
+ * unrealistic one: production LLM workloads have bad deploys, provider
+ * degradation, and runaway retrievals. Without them the anomaly detector has
+ * nothing to find at 30-minute resolution and the alerts panel is decorative.
+ *
+ * Incidents are derived from the clock, not from accumulated state: each
+ * 6-hour block deterministically decides whether it contains one, and a minute
+ * asks its own block (and the previous one, for incidents that straddle the
+ * boundary). That keeps generation stateless and preserves the property the
+ * ingester depends on — a minute's events are the same however they were
+ * chunked.
+ */
+
+type IncidentKind = "error_storm" | "latency_degradation" | "cost_spike";
+
+interface Incident {
+  kind: IncidentKind;
+  start: number;
+  end: number;
+  /** Severity, interpreted per kind. */
+  magnitude: number;
+}
+
+const INCIDENT_BLOCK_MS = 6 * 3600_000;
+/** Fraction of 6-hour blocks that contain an incident. */
+const INCIDENT_RATE = 0.55;
+
+function incidentForBlock(blockIndex: number, baseSeed: number): Incident | null {
+  const rng = makeRng((baseSeed ^ Math.imul(blockIndex, 0x85ebca6b)) >>> 0);
+  if (rng() > INCIDENT_RATE) return null;
+
+  const kind = weightedPick<IncidentKind>(rng, [
+    ["error_storm", 0.4],
+    ["latency_degradation", 0.35],
+    ["cost_spike", 0.25],
+  ]);
+
+  // 25–70 minutes long, so it spans several buckets even at 30-minute
+  // resolution and reads as an incident rather than a single odd sample.
+  const durationMs = (25 + rng() * 45) * MINUTE_MS;
+  const start = blockIndex * INCIDENT_BLOCK_MS + rng() * (INCIDENT_BLOCK_MS - durationMs);
+
+  const magnitude =
+    kind === "error_storm"
+      ? 0.12 + rng() * 0.35 // 12–47% of calls start failing
+      : kind === "latency_degradation"
+        ? 2.5 + rng() * 3.5 // 2.5–6× slower
+        : 3 + rng() * 5; // 3–8× the usual input size
+
+  return { kind, start: Math.round(start), end: Math.round(start + durationMs), magnitude };
+}
+
+function incidentAt(t: number, baseSeed: number): Incident | null {
+  const block = Math.floor(t / INCIDENT_BLOCK_MS);
+  // The previous block is checked too, so an incident crossing the boundary is
+  // not silently truncated.
+  for (const b of [block, block - 1]) {
+    const incident = incidentForBlock(b, baseSeed);
+    if (incident && t >= incident.start && t < incident.end) return incident;
+  }
+  return null;
 }
 
 /**
@@ -162,6 +233,7 @@ function generateMinute(
   const end = minuteStart + MINUTE_MS;
   const load = diurnalFactor(minuteStart);
   const effectiveRate = (ratePerMin * load) / MINUTE_MS; // per ms
+  const incident = incidentAt(minuteStart, baseSeed);
 
   const requests: LLMRequest[] = [];
   let t = minuteStart;
@@ -176,21 +248,31 @@ function generateMinute(
     const model = weightedPick(rng, profile.routing);
     const spec = MODELS[model];
 
-    const inputTokens = clampInt(lognormal(rng, profile.inMu, profile.inSigma), 20, 32_000);
+    // A cost-spike incident is a runaway retrieval: the prompt balloons while
+    // everything else about the request stays ordinary.
+    const inputBlowup = incident?.kind === "cost_spike" ? incident.magnitude : 1;
+    const inputTokens = clampInt(
+      lognormal(rng, profile.inMu, profile.inSigma) * inputBlowup,
+      20,
+      32_000,
+    );
     const outputTokens = clampInt(lognormal(rng, profile.outMu, profile.outSigma), 1, 8_000);
     // Only some of the cacheable input is actually cache-hit right now.
     const cacheable = inputTokens * profile.cacheRatio;
     const cachedTokens = clampInt(cacheable * rng() * 0.9, 0, inputTokens);
 
-    const status = pickStatus(rng, load);
+    const status = pickStatus(rng, load, incident);
     const failed = status !== "success";
 
     // Latency scales with output size, with a heavy right tail + rare spikes.
     const spike = rng() < 0.03 ? lognormal(rng, E(3), 0.4) : 1;
+    const degradation =
+      incident?.kind === "latency_degradation" ? incident.magnitude : 1;
     const latencyMs = clampInt(
       lognormal(rng, Math.log(spec.baseLatencyMs), 0.35) *
         (1 + outputTokens / 900) *
-        spike,
+        spike *
+        degradation,
       80,
       120_000,
     );
@@ -225,22 +307,31 @@ function generateMinute(
 }
 
 /**
- * Generate the stream over [from, to) by concatenating whole minutes.
- * Pure given its options — no Date.now()/Math.random() inside.
+ * Generate the stream over [from, to). Pure given its options — no Date.now()
+ * or Math.random() inside.
  *
- * Because each minute is seeded independently, `generateRange(a, c)` is exactly
- * `generateRange(a, b) ++ generateRange(b, c)` for any minute boundary b. That
- * identity is asserted in the test suite and is what lets the live ingester
- * append only the newly-elapsed minutes.
+ * Minutes are the unit of generation, but the bounds are honoured exactly: the
+ * minutes overlapping the range are produced in full and then trimmed to it.
+ * Because each minute is seeded from its own absolute index, that yields
+ *
+ *     generateRange(a, c) === generateRange(a, b) ++ generateRange(b, c)
+ *
+ * for *any* split point b, not just minute boundaries. The test suite asserts
+ * this. It is what lets the ingester append a few seconds of new events every
+ * tick — so the dashboard actually moves — while still producing byte-identical
+ * history to a single backfill.
  */
 export function generateRange(opts: GenerateRangeOptions): LLMRequest[] {
-  const { ratePerMin, seed } = opts;
-  const from = Math.floor(opts.from / MINUTE_MS) * MINUTE_MS;
-  const to = Math.floor(opts.to / MINUTE_MS) * MINUTE_MS;
+  const { from, to, ratePerMin, seed } = opts;
+  if (to <= from) return [];
 
+  const firstMinute = Math.floor(from / MINUTE_MS) * MINUTE_MS;
   const requests: LLMRequest[] = [];
-  for (let t = from; t < to; t += MINUTE_MS) {
-    requests.push(...generateMinute(t, ratePerMin, seed));
+
+  for (let t = firstMinute; t < to; t += MINUTE_MS) {
+    for (const r of generateMinute(t, ratePerMin, seed)) {
+      if (r.timestamp >= from && r.timestamp < to) requests.push(r);
+    }
   }
   return requests;
 }
