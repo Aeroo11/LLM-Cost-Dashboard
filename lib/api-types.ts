@@ -1,6 +1,7 @@
 import type { Summary } from "./aggregate";
 import type { Insight, SavingsBreakdown } from "./insights";
 import type { MetricFilters } from "./db/filters";
+import type { Anomaly } from "./db/anomalies";
 
 /** Selectable observation windows. */
 export type WindowKey = "1h" | "24h" | "7d";
@@ -40,4 +41,6 @@ export interface MetricsResponse {
   insights: Insight[];
   /** Recoverable monthly spend, split by measured vs assumption-based. */
   savings: SavingsBreakdown;
+  /** Statistical outliers in the bucketed series, most recent first. */
+  anomalies: Anomaly[];
 }

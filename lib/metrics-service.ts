@@ -3,6 +3,7 @@ import "server-only";
 import { withConnection } from "./db/client";
 import { querySummary, queryTotals } from "./db/queries";
 import { queryInsights } from "./db/insights";
+import { queryAnomalies } from "./db/anomalies";
 import { totalMonthlySavings } from "./insights";
 import type { MetricFilters, TimeRange } from "./db/filters";
 import { MINUTE_MS } from "./generator";
@@ -45,19 +46,23 @@ export async function buildMetrics(
 
   // One borrowed connection for the whole payload: every query below reads the
   // same snapshot, so the KPI row can never disagree with the chart beneath it.
-  const { summary, prev, insights } = await withConnection(async (connection) => {
-    const [summary, prev] = await Promise.all([
-      querySummary(connection, range, filters, bucketMinutes),
-      queryTotals(connection, previous, filters),
-    ]);
-    const insights = await queryInsights(
-      connection,
-      range,
-      filters,
-      summary.burnRateMonthlyUsd,
-    );
-    return { summary, prev, insights };
-  });
+  const { summary, prev, insights, anomalies } = await withConnection(
+    async (connection) => {
+      const [summary, prev, anomalies] = await Promise.all([
+        querySummary(connection, range, filters, bucketMinutes),
+        queryTotals(connection, previous, filters),
+        queryAnomalies(connection, range, filters, bucketMinutes),
+      ]);
+      // Depends on the burn rate, so it cannot join the batch above.
+      const insights = await queryInsights(
+        connection,
+        range,
+        filters,
+        summary.burnRateMonthlyUsd,
+      );
+      return { summary, prev, insights, anomalies };
+    },
+  );
 
   return {
     generatedAt: range.toMs,
@@ -74,5 +79,6 @@ export async function buildMetrics(
     },
     insights,
     savings: totalMonthlySavings(insights),
+    anomalies,
   };
 }
