@@ -143,6 +143,54 @@ ingests would otherwise append the same slice twice — while readers borrow the
 own short-lived connection. Verified with 12 concurrent requests and pinned by
 `lib/db/concurrency.test.ts`.
 
+### A native dependency the bundler could not see
+
+The first deployment built green, deployed green, and returned 500 on every
+single request. Nothing in the build output hinted at it.
+
+The DuckDB platform package ships two files that matter: `duckdb.node`, the
+~1 MB N-API addon, and the engine itself as a ~35 MB shared library
+(`libduckdb.so` on Linux, `duckdb.dll` on Windows). The addon is reached
+through a static `require()`, so Next's file tracing finds it. The shared
+library is not — it is resolved by the **operating system's dynamic loader** at
+load time, and no static analysis of the module graph can see that edge.
+
+So the function shipped the 1 MB addon without the 35 MB library it links
+against. `outputFileTracingIncludes` is the only way to declare a dependency
+that never appears in the module graph:
+
+```ts
+outputFileTracingIncludes: {
+  "/api/**": ["./node_modules/@duckdb/node-bindings-*/**"],
+},
+```
+
+Two things made this take longer than it should have, and both are now fixed:
+
+- **The driver was imported at module load.** A module that fails to load never
+  reaches any error handling, so the platform returned its own opaque HTML 500
+  and the JSON error wrapper never ran. The import is now deferred to first use,
+  which moves the failure inside a request where it can be caught and reported.
+- **There was nothing to ask.** `/api/health` now reports each stage separately
+  — resolve the binding, create an instance, build the store, query it — with
+  platform, arch, Node version and region. It named the cause in one request:
+  `libduckdb.so: cannot open shared object file`.
+
+### DuckDB's defaults are host defaults
+
+Every DuckDB default is derived from the machine it starts on, which is the
+wrong machine inside a function container:
+
+| Setting | Default here | Why it breaks |
+|---|---|---|
+| `temp_directory` | `.tmp` | Relative to the working directory — `/var/task`, read-only |
+| `memory_limit` | 25 GiB | 80% of the dev machine's RAM, against a ~1 GB function |
+| `threads` | 20 | Host core count, against ~2 vCPU |
+| extension autoload | on | Would download and write extensions under a read-only `$HOME` |
+
+All four are pinned in `lib/config.ts` and overridable by environment variable.
+The workload is small enough that 512 MB and two threads are generous for it.
+
 ### The "live" indicator tells the truth
 
 The earlier version polled every 5 seconds and rendered an animated "live"
@@ -151,6 +199,13 @@ twelve responses were byte-identical. Now the server pushes over SSE only when
 the payload actually changes, and the indicator reports real `EventSource` state:
 `connecting`, `live`, `reconnecting`, `disconnected`, plus how long ago the last
 frame landed.
+
+A serverless function cannot hold a connection open indefinitely, so the stream
+would otherwise be severed mid-flight and the browser would report a network
+error — the badge would flicker for every visitor. Instead the stream retires
+itself at 50s, under a declared `maxDuration` of 60, announcing the hand-over
+with a `rotating` event first. The client holds its `live` state across an
+announced rotation and reports `reconnecting` only for genuine faults.
 
 ---
 
