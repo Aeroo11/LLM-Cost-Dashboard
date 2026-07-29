@@ -13,6 +13,7 @@ import type { TimeBucket } from "@/lib/aggregate";
 import type { WindowKey } from "@/lib/api-types";
 import { MODELS } from "@/lib/models";
 import { CHART, MODEL_COLORS, MODEL_ORDER } from "@/lib/palette";
+import { formatUsdAxis } from "@/lib/format";
 import { ChartTooltip } from "./chart-tooltip";
 
 function timeTick(windowKey: WindowKey) {
@@ -35,18 +36,16 @@ export function CostOverTime({
   const rows = data.map((b) => ({ t: b.t, ...b.costByModel }));
   const fmtTick = timeTick(windowKey);
 
+  // Every tick on one axis shares a format, chosen from the tallest stack.
+  const peak = Math.max(
+    0,
+    ...data.map((b) => Object.values(b.costByModel).reduce((s, v) => s + v, 0)),
+  );
+
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={rows} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
-        <defs>
-          {MODEL_ORDER.map((m) => (
-            <linearGradient key={m} id={`grad-${m}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={MODEL_COLORS[m]} stopOpacity={0.55} />
-              <stop offset="100%" stopColor={MODEL_COLORS[m]} stopOpacity={0.05} />
-            </linearGradient>
-          ))}
-        </defs>
-        <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
+        <CartesianGrid stroke={CHART.grid} vertical={false} />
         <XAxis
           dataKey="t"
           tickFormatter={fmtTick}
@@ -57,11 +56,17 @@ export function CostOverTime({
         />
         <YAxis
           stroke={CHART.axis}
-          tick={{ fontSize: 11, fill: CHART.axis }}
+          tick={{
+            fontSize: 11,
+            fill: CHART.axis,
+            style: { fontVariantNumeric: "tabular-nums" },
+          }}
           tickLine={false}
           axisLine={false}
-          width={44}
-          tickFormatter={(v: number) => `$${v.toFixed(0)}`}
+          width={52}
+          // Integer dollars collapsed every tick to "$0" on the 1h window, where
+          // buckets are two minutes wide.
+          tickFormatter={(v: number) => formatUsdAxis(v, peak)}
         />
         <Tooltip
           cursor={{ stroke: CHART.axis, strokeOpacity: 0.3 }}
@@ -84,9 +89,16 @@ export function CostOverTime({
             type="monotone"
             dataKey={m}
             stackId="cost"
-            stroke={MODEL_COLORS[m]}
-            strokeWidth={1.5}
-            fill={`url(#grad-${m})`}
+            fill={MODEL_COLORS[m]}
+            fillOpacity={0.9}
+            // Surface does the separating, not a coloured outline: a 2px rule in
+            // the surface colour along each band's edge. The gradient this
+            // replaces made every band's base read as a different series than
+            // its top, and a coloured stroke around a mark is ink that is not data.
+            stroke={CHART.surface}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            activeDot={{ r: 4, strokeWidth: 2, stroke: CHART.surface }}
             isAnimationActive={false}
           />
         ))}

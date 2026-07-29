@@ -142,7 +142,7 @@ export function Dashboard() {
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Panel
               title="Cost by endpoint"
-              subtitle="Stacked by model · click a bar to filter"
+              subtitle="Stacked by model · click a bar to drill in"
               icon={Network}
               action={<ModelLegend />}
             >
