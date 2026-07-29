@@ -6,15 +6,11 @@ by SQL, and **served** over Server-Sent Events. It finds where money is being
 wasted, flags incidents statistically, and lets you re-price your traffic
 against a hypothetical setup before changing anything.
 
-<!--
-  SCREENSHOT SLOT — replace these two lines with real images.
-  Run `npm run dev`, capture the full page and the simulator panel, and save
-  them as docs/screenshot-dashboard.png and docs/screenshot-simulator.png.
--->
-
-![The dashboard](docs/screenshot-dashboard.png)
-
 **[Live demo](#)** · _add your Vercel URL here once deployed_
+
+> **Screenshots pending.** See [`docs/README.md`](docs/README.md) for what to
+> capture. Once `docs/screenshot-dashboard.png` exists, replace this block with:
+> `![The dashboard](docs/screenshot-dashboard.png)`
 
 ---
 
