@@ -8,9 +8,8 @@ against a hypothetical setup before changing anything.
 
 **[Live demo](#)** · _add your Vercel URL here once deployed_
 
-> **Screenshots pending.** See [`docs/README.md`](docs/README.md) for what to
-> capture. Once `docs/screenshot-dashboard.png` exists, replace this block with:
-> `![The dashboard](docs/screenshot-dashboard.png)`
+<img width="1911" height="916" alt="image" src="https://github.com/user-attachments/assets/66464145-89eb-4bf6-b2f7-0c2e5982cdaa" />
+
 
 ---
 
