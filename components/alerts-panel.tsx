@@ -2,12 +2,8 @@
 
 import type { Anomaly, AnomalyMetric } from "@/lib/db/anomalies";
 import { DEFAULT_THRESHOLD } from "@/lib/anomaly";
-
-const SEVERITY_COLOR: Record<Anomaly["severity"], string> = {
-  high: "#ec835a",
-  medium: "#fab219",
-  low: "#9aa0ad",
-};
+import { SEVERITY_COLOR } from "@/lib/palette";
+import { Card } from "./ui/card";
 
 const METRIC_LABEL: Record<AnomalyMetric, string> = {
   cost: "Cost",
@@ -33,7 +29,7 @@ export function AlertsPanel({
   onSelect?: (at: number) => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <Card>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
@@ -94,6 +90,6 @@ export function AlertsPanel({
           ))}
         </ul>
       )}
-    </div>
+    </Card>
   );
 }

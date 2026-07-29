@@ -44,7 +44,7 @@ export function CostByModel({
           type="category"
           dataKey="label"
           width={104}
-          tick={{ fontSize: 12, fill: "#e7e9ee" }}
+          tick={{ fontSize: 12, fill: CHART.ink }}
           tickLine={false}
           axisLine={false}
         />
@@ -61,7 +61,7 @@ export function CostByModel({
                 <text
                   x={Number(x) + Number(width) + 8}
                   y={Number(y) + Number(height) / 2}
-                  fill="#e7e9ee"
+                  fill={CHART.ink}
                   fontSize={12}
                   fontWeight={600}
                   dominantBaseline="middle"
