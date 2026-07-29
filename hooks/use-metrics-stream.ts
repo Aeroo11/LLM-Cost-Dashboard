@@ -35,6 +35,10 @@ export function useMetricsStream(queryString: string): StreamResult {
   // Distinguishes a first connection from a dropped one, so the UI can say
   // "reconnecting" instead of flashing back to "connecting".
   const hasConnected = useRef(false);
+  // Set when the server announces it is retiring the connection at its
+  // execution ceiling. The reconnect that follows is routine, not a fault, so
+  // the indicator must not flash "reconnecting" every time it happens.
+  const rotating = useRef(false);
 
   useEffect(() => {
     const source = new EventSource(`/api/stream?${queryString}`);
@@ -46,6 +50,7 @@ export function useMetricsStream(queryString: string): StreamResult {
         setStatus("live");
         setError(null);
         hasConnected.current = true;
+        rotating.current = false;
       } catch {
         setError("Received a malformed frame from the stream.");
         setStatus("error");
@@ -62,18 +67,27 @@ export function useMetricsStream(queryString: string): StreamResult {
       setStatus("error");
     };
 
+    // The server hit its execution ceiling and is handing over to a fresh
+    // connection. Nothing is wrong, so hold the "live" state across the gap.
+    const onRotating = () => {
+      rotating.current = true;
+    };
+
     // Fired on network drops too, where the browser will retry on its own.
     const onError = () => {
+      if (rotating.current) return; // announced hand-over, not a fault
       setStatus(hasConnected.current ? "reconnecting" : "connecting");
     };
 
     source.addEventListener("metrics", onMetrics as EventListener);
     source.addEventListener("stream-error", onStreamError as EventListener);
+    source.addEventListener("rotating", onRotating);
     source.addEventListener("error", onError);
 
     return () => {
       source.removeEventListener("metrics", onMetrics as EventListener);
       source.removeEventListener("stream-error", onStreamError as EventListener);
+      source.removeEventListener("rotating", onRotating);
       source.removeEventListener("error", onError);
       source.close();
     };

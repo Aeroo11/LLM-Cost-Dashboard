@@ -4,6 +4,7 @@ import { queryRequests, type RequestPage, type RequestSortKey } from "@/lib/db/q
 import { parseFilters } from "@/lib/db/filters";
 import { currentRange } from "@/lib/metrics-service";
 import { parseWindowKey } from "@/lib/api-types";
+import { withErrorReporting } from "@/lib/api-error";
 
 /**
  * `GET /api/requests` — the raw events behind the charts.
@@ -25,23 +26,23 @@ function parseInt10(raw: string | null, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export async function GET(req: NextRequest): Promise<NextResponse<RequestPage>> {
-  const params = req.nextUrl.searchParams;
-  const windowKey = parseWindowKey(params.get("window"));
-  const filters = parseFilters(params);
-  const range = currentRange(windowKey);
+export function GET(req: NextRequest) {
+  return withErrorReporting<RequestPage>(async () => {
+    const params = req.nextUrl.searchParams;
+    const windowKey = parseWindowKey(params.get("window"));
+    const filters = parseFilters(params);
+    const range = currentRange(windowKey);
 
-  const page = await withConnection((connection) =>
-    queryRequests(connection, range, filters, {
-      sort: parseSort(params.get("sort")),
-      direction: params.get("dir") === "asc" ? "asc" : "desc",
-      // queryRequests clamps these; parsing here only keeps NaN out.
-      limit: parseInt10(params.get("limit"), 25),
-      offset: parseInt10(params.get("offset"), 0),
-    }),
-  );
+    const page = await withConnection((connection) =>
+      queryRequests(connection, range, filters, {
+        sort: parseSort(params.get("sort")),
+        direction: params.get("dir") === "asc" ? "asc" : "desc",
+        // queryRequests clamps these; parsing here only keeps NaN out.
+        limit: parseInt10(params.get("limit"), 25),
+        offset: parseInt10(params.get("offset"), 0),
+      }),
+    );
 
-  return NextResponse.json(page, {
-    headers: { "Cache-Control": "no-store" },
+    return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });
   });
 }

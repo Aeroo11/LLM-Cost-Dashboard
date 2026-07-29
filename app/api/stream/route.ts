@@ -17,6 +17,14 @@ import { parseWindowKey } from "@/lib/api-types";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+/**
+ * Serverless functions have a hard execution ceiling, so an SSE connection
+ * cannot live forever. Rather than letting the platform sever it — which the
+ * browser sees as a network failure — the stream retires itself just short of
+ * the limit and tells the client it is a planned rotation.
+ */
+export const maxDuration = 60;
+
 /** How often to recompute. Fast enough to feel live, slow enough to be cheap. */
 const TICK_MS = 2_000;
 
@@ -26,12 +34,19 @@ const TICK_MS = 2_000;
  */
 const HEARTBEAT_MS = 20_000;
 
+/**
+ * Close cleanly with headroom under `maxDuration`, so the goodbye frame is
+ * always delivered before the platform pulls the plug.
+ */
+const MAX_LIFETIME_MS = 50_000;
+
 export async function GET(req: NextRequest): Promise<Response> {
   const windowKey = parseWindowKey(req.nextUrl.searchParams.get("window"));
   const filters = parseFilters(req.nextUrl.searchParams);
 
   const encoder = new TextEncoder();
   let timer: ReturnType<typeof setInterval> | undefined;
+  let lifetimeTimer: ReturnType<typeof setTimeout> | undefined;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -48,6 +63,7 @@ export async function GET(req: NextRequest): Promise<Response> {
         if (closed) return;
         closed = true;
         if (timer) clearInterval(timer);
+        if (lifetimeTimer) clearTimeout(lifetimeTimer);
         try {
           controller.close();
         } catch {
@@ -92,12 +108,23 @@ export async function GET(req: NextRequest): Promise<Response> {
       // Client navigated away, reloaded, or lost the connection.
       req.signal.addEventListener("abort", shutdown);
 
+      // Retire before the platform's execution ceiling. The client reconnects
+      // immediately and, because this is announced, does not report it as a
+      // dropped connection.
+      const lifetime = setTimeout(() => {
+        if (closed) return;
+        send("rotating", JSON.stringify({ reason: "max-duration" }));
+        shutdown();
+      }, MAX_LIFETIME_MS);
+      lifetimeTimer = lifetime;
+
       await tick();
       timer = setInterval(tick, TICK_MS);
     },
 
     cancel() {
       if (timer) clearInterval(timer);
+      if (lifetimeTimer) clearTimeout(lifetimeTimer);
     },
   });
 

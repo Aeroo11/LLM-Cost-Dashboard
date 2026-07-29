@@ -8,7 +8,13 @@ import {
 import type { LLMRequest } from "../types";
 import { MODELS } from "../models";
 import { generateRange } from "../generator";
-import { DB_PATH, RATE_PER_MIN, RETENTION_HOURS, SEED } from "../config";
+import {
+  DB_PATH,
+  DUCKDB_SETTINGS,
+  RATE_PER_MIN,
+  RETENTION_HOURS,
+  SEED,
+} from "../config";
 import { DDL, VIEWS } from "./schema";
 
 /**
@@ -114,7 +120,10 @@ async function appendRequests(
 }
 
 async function createStore(): Promise<Store> {
-  const instance = await DuckDBInstance.create(DB_PATH);
+  // DUCKDB_SETTINGS pins temp dir, memory, threads and extension loading —
+  // DuckDB's defaults are derived from the host machine and are actively wrong
+  // inside a function container. See lib/config.ts for why each one matters.
+  const instance = await DuckDBInstance.create(DB_PATH, DUCKDB_SETTINGS);
   const writer = await instance.connect();
   await bootstrap(writer);
 
@@ -228,7 +237,7 @@ export async function createTestStore(
   to: number,
   opts: { ratePerMin?: number; seed?: number } = {},
 ): Promise<{ instance: DuckDBInstance; connection: DuckDBConnection }> {
-  const instance = await DuckDBInstance.create(":memory:");
+  const instance = await DuckDBInstance.create(":memory:", DUCKDB_SETTINGS);
   const connection = await instance.connect();
   await bootstrap(connection);
   await appendRequests(
