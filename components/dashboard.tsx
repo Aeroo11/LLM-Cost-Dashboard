@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { StatTile } from "./ui/stat-tile";
 import { LatencyCard } from "./latency-card";
+import { EndpointEconomics } from "./endpoint-economics";
 import { TokenFlowCard } from "./token-flow-card";
 import { Panel, LegendDot } from "./panel";
 import { InsightsPanel } from "./insights-panel";
@@ -176,6 +177,12 @@ export function Dashboard() {
             <Panel title="Cost by model" subtitle="Who spends the budget" icon={Cpu}>
               <CostByModel byModel={s.byModel} total={s.totalCostUsd} />
             </Panel>
+          </div>
+
+          {/* Directly after the endpoint spend chart: where the money goes,
+              then whether it is well spent. */}
+          <div className="mt-4">
+            <EndpointEconomics summary={s} />
           </div>
 
           <Panel
