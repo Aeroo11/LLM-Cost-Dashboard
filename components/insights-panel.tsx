@@ -1,4 +1,4 @@
-import type { Insight, InsightSeverity } from "@/lib/insights";
+import type { Insight, InsightSeverity, SavingsBreakdown } from "@/lib/insights";
 import { formatUsd } from "@/lib/format";
 
 const SEVERITY: Record<
@@ -17,10 +17,10 @@ const CATEGORY_LABEL: Record<Insight["category"], string> = {
 
 export function InsightsPanel({
   insights,
-  potentialMonthlySavingsUsd,
+  savings,
 }: {
   insights: Insight[];
-  potentialMonthlySavingsUsd: number;
+  savings: SavingsBreakdown;
 }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-5">
@@ -35,9 +35,19 @@ export function InsightsPanel({
         </div>
         <div className="text-right">
           <p className="text-lg font-semibold tabular-nums text-success">
-            {formatUsd(potentialMonthlySavingsUsd)}
+            {formatUsd(savings.measuredUsd)}
           </p>
-          <p className="text-xs text-text-muted">recoverable / mo</p>
+          <p className="text-xs text-text-muted">
+            measured / mo
+            {savings.assumedUsd > 0 && (
+              <>
+                {" · "}
+                <span className="text-text-muted/80">
+                  +{formatUsd(savings.assumedUsd)} est.
+                </span>
+              </>
+            )}
+          </p>
         </div>
       </div>
 
@@ -47,49 +57,81 @@ export function InsightsPanel({
         </p>
       ) : (
         <ul className="space-y-3">
-          {insights.map((ins) => {
-            const sev = SEVERITY[ins.severity];
-            return (
-              <li
-                key={ins.id}
-                className="relative overflow-hidden rounded-lg border border-border bg-surface-2 p-4 pl-5"
-              >
-                <span
-                  className="absolute inset-y-0 left-0 w-1"
-                  style={{ backgroundColor: sev.bar }}
-                  aria-hidden
-                />
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="mb-1 flex items-center gap-2">
-                      <span
-                        className="inline-flex items-center gap-1 text-[11px] font-medium"
-                        style={{ color: sev.color }}
-                      >
-                        <span aria-hidden>{sev.icon}</span>
-                        {sev.label}
-                      </span>
-                      <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted">
-                        {CATEGORY_LABEL[ins.category]}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-medium">{ins.title}</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                      {ins.detail}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums text-success">
-                      {formatUsd(ins.monthlySavingsUsd)}
-                    </p>
-                    <p className="text-[10px] text-text-muted">/ mo</p>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
+          {insights.map((ins) => (
+            <InsightRow key={ins.id} insight={ins} />
+          ))}
         </ul>
       )}
     </div>
+  );
+}
+
+function InsightRow({ insight: ins }: { insight: Insight }) {
+  const sev = SEVERITY[ins.severity];
+  return (
+    <li className="relative overflow-hidden rounded-lg border border-border bg-surface-2 p-4 pl-5">
+      <span
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ backgroundColor: sev.bar }}
+        aria-hidden
+      />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-medium"
+              style={{ color: sev.color }}
+            >
+              <span aria-hidden>{sev.icon}</span>
+              {sev.label}
+            </span>
+            <Tag>{CATEGORY_LABEL[ins.category]}</Tag>
+            <Tag
+              title={
+                ins.basis === "measured"
+                  ? "Re-priced directly from the observed events in this window."
+                  : ins.assumption
+              }
+            >
+              {ins.basis === "measured" ? "measured" : "estimate"}
+            </Tag>
+          </div>
+
+          <h3 className="text-sm font-medium">{ins.title}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-text-muted">{ins.detail}</p>
+
+          {/* The cost of taking the advice, stated next to the benefit. */}
+          {ins.qualityDelta !== undefined && (
+            <p className="mt-1.5 text-xs text-warning">
+              Trade-off: average quality {ins.qualityDelta >= 0 ? "+" : ""}
+              {ins.qualityDelta.toFixed(3)} on affected calls
+            </p>
+          )}
+          {ins.assumption && (
+            <p className="mt-1.5 text-xs italic leading-relaxed text-text-muted/80">
+              {ins.assumption}
+            </p>
+          )}
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-semibold tabular-nums text-success">
+            {formatUsd(ins.monthlySavingsUsd)}
+          </p>
+          <p className="text-[10px] text-text-muted">/ mo</p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function Tag({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <span
+      title={title}
+      className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted"
+    >
+      {children}
+    </span>
   );
 }

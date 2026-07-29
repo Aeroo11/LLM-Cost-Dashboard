@@ -129,10 +129,7 @@ export function Dashboard() {
         <>
           {/* Insights headline */}
           <div className="mt-4">
-            <InsightsPanel
-              insights={data.insights}
-              potentialMonthlySavingsUsd={data.potentialMonthlySavingsUsd}
-            />
+            <InsightsPanel insights={data.insights} savings={data.savings} />
           </div>
 
           {/* Cost over time */}
