@@ -14,6 +14,7 @@ import {
 import { useDashboardState } from "@/hooks/use-dashboard-state";
 import { useMetricsStream, type ConnectionState } from "@/hooks/use-metrics-stream";
 import { cn } from "@/lib/cn";
+import { Cpu, Gauge, Network, Table2, TrendingUp } from "lucide-react";
 import { KpiCard } from "./kpi-card";
 import { Card } from "./ui/card";
 import { Panel, LegendDot } from "./panel";
@@ -131,6 +132,7 @@ export function Dashboard() {
           <Panel
             title="Cost over time"
             subtitle={`Stacked by model · last ${WINDOWS[windowKey].label}`}
+            icon={TrendingUp}
             className="mt-4"
             action={<ModelLegend />}
           >
@@ -141,6 +143,7 @@ export function Dashboard() {
             <Panel
               title="Cost by endpoint"
               subtitle="Stacked by model · click a bar to filter"
+              icon={Network}
               action={<ModelLegend />}
             >
               <CostByEndpoint
@@ -149,7 +152,7 @@ export function Dashboard() {
                 onSelect={(endpoint) => toggleFilter("endpoints", endpoint)}
               />
             </Panel>
-            <Panel title="Cost by model" subtitle="Who spends the budget">
+            <Panel title="Cost by model" subtitle="Who spends the budget" icon={Cpu}>
               <CostByModel byModel={s.byModel} total={s.totalCostUsd} />
             </Panel>
           </div>
@@ -157,6 +160,7 @@ export function Dashboard() {
           <Panel
             title="Cost vs quality"
             subtitle="Bubble = total spend · bottom-right = overpaying"
+            icon={Gauge}
             className="mt-4"
             action={<ModelLegend />}
           >
@@ -170,6 +174,7 @@ export function Dashboard() {
           <Panel
             title="Requests"
             subtitle="The raw events behind every number above"
+            icon={Table2}
             className="mt-4"
           >
             <RequestsTable queryString={queryString} />

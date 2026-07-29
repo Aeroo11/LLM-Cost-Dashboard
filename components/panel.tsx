@@ -1,15 +1,18 @@
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { Card } from "./ui/card";
 
 export function Panel({
   title,
   subtitle,
+  icon: Icon,
   action,
   children,
   className = "",
 }: {
   title: string;
   subtitle?: string;
+  icon?: LucideIcon;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -18,7 +21,17 @@ export function Panel({
     <Card className={className}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            {Icon && (
+              <Icon
+                size={16}
+                strokeWidth={1.75}
+                aria-hidden
+                className="shrink-0 text-text-subtle"
+              />
+            )}
+            {title}
+          </h2>
           {subtitle && <p className="mt-0.5 text-xs text-text-muted">{subtitle}</p>}
         </div>
         {action}

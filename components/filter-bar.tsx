@@ -5,6 +5,7 @@ import { MODEL_COLORS, MODEL_ORDER } from "@/lib/palette";
 import { ENDPOINT_IDS, STATUS_IDS, type MetricFilters } from "@/lib/db/filters";
 import type { FilterDimension } from "@/hooks/use-dashboard-state";
 import { cn } from "@/lib/cn";
+import { X } from "lucide-react";
 import { Card } from "./ui/card";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -77,8 +78,9 @@ export function FilterBar({
             <button
               type="button"
               onClick={onClear}
-              className="rounded-md border border-border px-2 py-1 transition-colors hover:border-text-muted/50 hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="inline-flex items-center gap-1 rounded-control border border-border px-2 py-1 transition-colors duration-150 hover:border-border-strong hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
+              <X size={12} strokeWidth={1.75} aria-hidden className="shrink-0" />
               Clear filters
             </button>
           )}

@@ -6,6 +6,16 @@ import type { RequestSortKey } from "@/lib/db/queries";
 import { MODELS } from "@/lib/models";
 import { MODEL_COLORS } from "@/lib/palette";
 import { formatMs, formatTokens, formatUsd } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronsUpDown,
+  Zap,
+} from "lucide-react";
 
 /**
  * The raw events behind the aggregates.
@@ -136,9 +146,7 @@ export function RequestsTable({ queryString }: { queryString: string }) {
                       className="inline-flex items-center gap-1 transition-colors hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
                       {col.label}
-                      <span aria-hidden className="text-[9px]">
-                        {col.key === sort ? (direction === "asc" ? "▲" : "▼") : "◆"}
-                      </span>
+                      <SortIcon active={col.key === sort} direction={direction} />
                     </button>
                   ) : (
                     col.label
@@ -173,14 +181,20 @@ export function RequestsTable({ queryString }: { queryString: string }) {
                 <td className="px-2 py-1.5 text-text-muted">{r.endpoint}</td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-text-muted">
                   {formatTokens(r.inputTokens)}
-                  <span className="mx-1 opacity-40">→</span>
+                  <ArrowRight
+                    size={11}
+                    strokeWidth={1.75}
+                    aria-hidden
+                    className="mx-1 inline shrink-0 align-[-0.1em] opacity-40"
+                  />
                   {formatTokens(r.outputTokens)}
                   {r.cachedTokens > 0 && (
                     <span
-                      className="ml-1.5 text-[10px] text-success"
+                      className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-eyebrow text-success"
                       title={`${formatTokens(r.cachedTokens)} served from cache`}
                     >
-                      ⚡{Math.round((r.cachedTokens / Math.max(r.inputTokens, 1)) * 100)}%
+                      <Zap size={11} strokeWidth={1.75} aria-hidden className="shrink-0" />
+                      {Math.round((r.cachedTokens / Math.max(r.inputTokens, 1)) * 100)}%
                     </span>
                   )}
                 </td>
@@ -220,13 +234,15 @@ export function RequestsTable({ queryString }: { queryString: string }) {
             disabled={offset === 0}
             onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
           >
-            ← Prev
+            <ChevronLeft size={14} strokeWidth={1.75} aria-hidden className="shrink-0" />
+            Prev
           </PagerButton>
           <PagerButton
             disabled={offset + PAGE_SIZE >= total}
             onClick={() => setOffset((o) => o + PAGE_SIZE)}
           >
-            Next →
+            Next
+            <ChevronRight size={14} strokeWidth={1.75} aria-hidden className="shrink-0" />
           </PagerButton>
         </span>
       </div>
@@ -248,9 +264,25 @@ function PagerButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded-md border border-border px-2 py-1 transition-colors enabled:hover:border-text-muted/50 enabled:hover:text-text disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="inline-flex items-center gap-1 rounded-control border border-border px-2 py-1 transition-colors duration-150 enabled:hover:border-border-strong enabled:hover:text-text disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * The neutral state is a distinct glyph rather than a faded arrow, so "not
+ * sorted by this column" never reads as "sorted, dimly".
+ */
+function SortIcon({ active, direction }: { active: boolean; direction: "asc" | "desc" }) {
+  const Icon = !active ? ChevronsUpDown : direction === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <Icon
+      size={12}
+      strokeWidth={1.75}
+      aria-hidden
+      className={cn("shrink-0", active ? "text-text" : "text-text-subtle")}
+    />
   );
 }

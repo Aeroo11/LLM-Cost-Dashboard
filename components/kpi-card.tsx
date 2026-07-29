@@ -1,4 +1,6 @@
 import { formatDelta } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { Card } from "./ui/card";
 
 export interface KpiCardProps {
@@ -21,10 +23,10 @@ function DeltaBadge({ pct, invert }: { pct: number; invert: boolean }) {
     : good
       ? "text-success"
       : "text-danger";
-  const arrow = flat ? "→" : isUp ? "▲" : "▼";
+  const Arrow = flat ? Minus : isUp ? ArrowUpRight : ArrowDownRight;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium ${color}`}>
-      <span aria-hidden>{arrow}</span>
+    <span className={cn("inline-flex items-center gap-1 text-xs font-medium", color)}>
+      <Arrow size={14} strokeWidth={1.75} aria-hidden className="shrink-0" />
       {formatDelta(pct)}
     </span>
   );

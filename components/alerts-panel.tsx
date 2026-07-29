@@ -3,6 +3,7 @@
 import type { Anomaly, AnomalyMetric } from "@/lib/db/anomalies";
 import { DEFAULT_THRESHOLD } from "@/lib/anomaly";
 import { SEVERITY_COLOR } from "@/lib/palette";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 import { Card } from "./ui/card";
 
 const METRIC_LABEL: Record<AnomalyMetric, string> = {
@@ -33,7 +34,13 @@ export function AlertsPanel({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-            <span aria-hidden>🚨</span> Anomalies
+            <TriangleAlert
+              size={16}
+              strokeWidth={1.75}
+              aria-hidden
+              className="shrink-0 text-text-subtle"
+            />
+            Anomalies
           </h2>
           <p className="mt-0.5 text-xs text-text-muted">
             Modified z-score vs a rolling median baseline, flagged past{" "}
@@ -48,8 +55,14 @@ export function AlertsPanel({
       </div>
 
       {anomalies.length === 0 ? (
-        <p className="py-6 text-center text-sm text-text-muted">
-          Nothing unusual in this window. ✓
+        <p className="flex items-center justify-center gap-2 py-6 text-center text-sm text-text-muted">
+          <CircleCheck
+            size={14}
+            strokeWidth={1.75}
+            aria-hidden
+            className="shrink-0 text-success"
+          />
+          Nothing unusual in this window.
         </p>
       ) : (
         <ul className="space-y-2">
