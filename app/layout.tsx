@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -18,10 +18,40 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+const DESCRIPTION =
+  "Monitoring dashboard for LLM cost, usage, and optimization opportunities in production.";
+
 export const metadata: Metadata = {
-  title: "TokenWatch — LLM Cost Intelligence",
-  description:
-    "Monitoring dashboard for LLM cost, usage, and optimization opportunities in production.",
+  // Required, or Next warns at build and emits a relative og:image URL that no
+  // crawler can resolve.
+  metadataBase: new URL(
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000",
+  ),
+  title: {
+    default: "TokenWatch — LLM Cost Intelligence",
+    template: "%s · TokenWatch",
+  },
+  description: DESCRIPTION,
+  applicationName: "TokenWatch",
+  openGraph: {
+    type: "website",
+    siteName: "TokenWatch",
+    locale: "en_US",
+    title: "TokenWatch — LLM Cost Intelligence",
+    description: DESCRIPTION,
+  },
+  twitter: { card: "summary_large_image" },
+};
+
+// themeColor and colorScheme belong here, not in `metadata` — they moved in
+// Next 15 and silently do nothing if left behind.
+export const viewport: Viewport = {
+  themeColor: "#0a0b0f",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
