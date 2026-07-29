@@ -62,8 +62,10 @@ export function Dashboard() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="font-mono text-xs text-accent">TokenWatch</p>
-          <h1 className="text-xl font-semibold tracking-tight">LLM Cost Intelligence</h1>
+          <p className="font-mono text-xs tracking-wide text-accent">TokenWatch</p>
+          <h1 className="mt-0.5 text-2xl font-semibold tracking-tight">
+            LLM Cost Intelligence
+          </h1>
         </div>
         <div className="flex items-center gap-3">
           <LiveIndicator status={status} lastUpdateMs={lastUpdateMs} />
@@ -171,21 +173,24 @@ export function Dashboard() {
             stale && "opacity-60",
           )}
         >
+          {/* Still "what is true right now", so it stays close to the KPIs. */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <LatencyCard summary={s} />
             <TokenFlowCard summary={s} />
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* New band: what to do about it. */}
+          <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <InsightsPanel insights={data.insights} savings={data.savings} />
             <AlertsPanel anomalies={data.anomalies} />
           </div>
 
+          {/* New band: the breakdowns behind those numbers. */}
           <Panel
             title="Cost over time"
             subtitle={`Stacked by model · last ${WINDOWS[windowKey].label}`}
             icon={TrendingUp}
-            className="mt-4"
+            className="mt-8"
             action={<ModelLegend />}
           >
             <CostOverTime data={s.timeSeries} windowKey={windowKey} />
@@ -225,22 +230,24 @@ export function Dashboard() {
             <CostVsQuality byModel={s.byModel} />
           </Panel>
 
-          <div className="mt-4">
+          {/* New band: a tool rather than a reading. */}
+          <div className="mt-8">
             <SimulatorPanel queryString={queryString} />
           </div>
 
+          {/* New band: the raw events everything above is derived from. */}
           <Panel
             title="Requests"
             subtitle="The raw events behind every number above"
             icon={Table2}
-            className="mt-4"
+            className="mt-8"
           >
             <RequestsTable queryString={queryString} />
           </Panel>
         </div>
       )}
 
-      <footer className="mt-8 space-y-1 text-center text-xs text-text-muted">
+      <footer className="mt-12 space-y-1 text-center text-xs text-text-muted">
         <p>
           Simulated traffic · streamed over SSE ·{" "}
           <span className="font-mono">TokenWatch</span> demo
