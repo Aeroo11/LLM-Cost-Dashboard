@@ -1,7 +1,12 @@
 /**
  * Build a persistent DuckDB file from the simulated event stream.
  *
- *   npm run seed -- --hours 168 --out data/events.duckdb
+ *   npm run seed                                   # defaults
+ *   npx tsx scripts/seed.ts --hours 24             # with flags
+ *
+ * Invoke through `tsx` directly when passing flags: `npm run seed -- --hours 24`
+ * does not work reliably, because npm claims `--hours` as one of its own config
+ * options before the script ever sees it.
  *
  * The dashboard itself does not need this: it backfills an in-memory store on
  * boot. The file matters for the other half of the story — once it exists you

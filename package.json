@@ -1,7 +1,22 @@
 {
   "name": "llm-cost-dashboard",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "description": "TokenWatch — a live LLM cost-observability dashboard over a DuckDB analytics store, with anomaly detection and a what-if cost simulator.",
+  "keywords": [
+    "duckdb",
+    "analytics",
+    "observability",
+    "llm",
+    "cost-optimization",
+    "anomaly-detection",
+    "nextjs",
+    "sql"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -22,7 +37,6 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
