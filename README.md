@@ -1,348 +1,49 @@
-# TokenWatch — LLM Cost Intelligence
+# TokenWatch
 
-A live cost-observability dashboard for LLM traffic, built on a real analytics
-pipeline: simulated events are **ingested** into a DuckDB store, **transformed**
-by SQL, and **served** over Server-Sent Events. It finds where money is being
-wasted, flags incidents statistically, and lets you re-price your traffic
-against a hypothetical setup before changing anything.
+**An LLM cost dashboard for investigating spend and testing routing changes.**
 
-**[Live demo](#)** · _add your Vercel URL here once deployed_
+TokenWatch shows how much each model and endpoint costs, flags unusual spending or performance, and lets you test a new configuration against the same traffic. A seeded event stream drives the demo, so you can try it without an LLM API key.
 
-<img width="1911" height="916" alt="image" src="https://github.com/user-attachments/assets/66464145-89eb-4bf6-b2f7-0c2e5982cdaa" />
+[Open the live demo](https://llm-cost-dashboard-omega.vercel.app/) · [Read the engineering notes](docs/README.md)
 
+![TokenWatch overview showing LLM spend, error rate, p95 latency, and recent anomalies](docs/screenshot-dashboard.png)
 
----
+## Try an investigation
 
-## The problem
+1. Open **Overview** and select an anomaly. The cost chart marks the incident interval. **View related requests** opens the request log filtered to that interval.
+2. Open **Cost breakdown** to see which models and endpoints account for the spend.
+3. Return to **Overview** and select **Test 50% in simulator**. The simulator compares projected monthly spend and estimated quality against the current configuration.
 
-LLM spend is easy to measure and hard to act on. A finance export tells you that
-last month cost $4,200; it does not tell you that a third of it went to running
-a frontier model on a classification task a small model handles fine, or that a
-bad deploy on Tuesday quietly tripled your error rate for forty minutes while
-you kept paying for the input tokens.
+![TokenWatch simulator comparing baseline and projected monthly spend after routing half of an endpoint's traffic to a different model](docs/screenshot-simulator.png)
 
-This dashboard is built around three questions a cost report does not answer:
+## How it works
 
-| Question | How it is answered |
-|---|---|
-| **Where is money leaking?** | Cost cross-tabbed by endpoint × model. Over-provisioned routing shows up as an expensive band inside a cheap workload's bar. |
-| **When did something break?** | Rolling-median anomaly detection over cost, error rate and p95 latency. |
-| **What if I changed it?** | A simulator that re-prices the real traffic against a scenario — different routing, a different cache hit rate, more volume. |
+Deterministic request events are stored in DuckDB and aggregated in SQL. A Next.js API pushes new snapshots to the dashboard over Server-Sent Events.
 
----
+- **Ingestion.** Time-based seeding makes incremental appends agree with a single backfill for the same interval. [Generator and tests](lib/generator.test.ts)
+- **Anomaly detection.** A rolling median and median absolute deviation flag changes in cost, error rate, and p95 latency. Each bucket is compared with earlier buckets. [Anomaly queries](lib/db/anomalies.ts)
+- **Scenario pricing.** The simulator changes model routing, cache hit rate, or traffic volume and joins the result to the model price table. [Simulation query](lib/db/simulate.ts)
 
-## Architecture
+The event stream and quality scores are synthetic. Model prices are illustrative, and savings are projections based on the demo data.
 
-```mermaid
-flowchart LR
-  G["Event generator<br/><i>seeded, deterministic per minute</i>"]
-  I["Ingestion<br/><i>DuckDB appender</i>"]
-  S[("DuckDB<br/>requests (fact)<br/>models (dimension)")]
-  Q["SQL layer<br/><i>aggregation · insights<br/>anomalies · simulation</i>"]
-  A["/api/stream · /api/metrics<br>/api/requests · /api/simulate"]
-  U["Dashboard<br/><i>SSE client</i>"]
+## Run locally
 
-  G -->|"backfill 7d, then<br/>append elapsed slices"| I
-  I --> S
-  S --> Q
-  Q --> A
-  A -->|"push on change"| U
-```
-
-**Ingestion → storage → transformation → serving.** Every number on screen is
-produced by a SQL query against the fact table — nothing is aggregated in
-JavaScript.
-
-| Layer | Where | What it does |
-|---|---|---|
-| Generation | `lib/generator.ts` | Poisson arrivals, log-normal tokens and latency, a diurnal traffic curve, and deterministic incidents |
-| Ingestion | `lib/db/client.ts` | 7-day backfill through DuckDB's appender, then continuous sub-minute appends |
-| Schema | `lib/db/schema.ts` | `requests` fact table + `models` price-book dimension |
-| Transformation | `lib/db/{queries,insights,anomalies,simulate}.ts` | All aggregation, in SQL |
-| Serving | `app/api/*` | SSE stream, snapshot endpoint, drill-down, simulator |
-
----
-
-## Engineering notes
-
-The decisions worth explaining, and why they went the way they did.
-
-### The SQL is checked against a second implementation
-
-`lib/aggregate.ts` is a pure-TypeScript roll-up that computes the same summary
-the SQL layer does. It is not dead code — the test suite runs both over an
-identical event stream and asserts they agree, down to per-bucket per-model
-cost and interpolated latency percentiles.
-
-Two independent implementations of one spec disagree only if one of them is
-wrong. That is a much stronger check than asserting either against hand-written
-expected values, which mostly tests that you can do arithmetic twice the same
-way. The same pattern covers the savings insights and the median/MAD used by
-the anomaly detector.
-
-### Incremental ingestion had to be provably equivalent to a backfill
-
-The store appends only the time that has actually elapsed since the last tick —
-a few seconds' worth. For the history to be correct, appending in slices must
-produce exactly what one large backfill would have produced.
-
-That holds because generation is seeded from each minute's **absolute index**
-rather than from a running PRNG, so:
-
-```
-generateRange(a, c) === generateRange(a, b) ++ generateRange(b, c)
-```
-
-for any split point `b`, including mid-minute. `lib/generator.test.ts` asserts
-it at minute boundaries, mid-minute, and across many small slices.
-
-### Mean and standard deviation are the wrong tools for anomaly detection
-
-The obvious detector — flag anything beyond 3σ — fails on exactly the data it
-is meant to police. Both the mean and the standard deviation are dragged around
-by the spikes being detected, so one incident inflates the threshold enough to
-mask the next, and a sustained outage quietly becomes the new normal.
-
-The detector uses a rolling **median** baseline and **median absolute
-deviation**, scored with the Iglewicz–Hoaglin modified z-score. Both statistics
-have a 50% breakdown point. The point under test is excluded from its own
-baseline, since including it pulls the median toward the value being judged.
-
-A first version could not detect error storms *at all*. A healthy service sits
-at exactly zero errors, so more than half the trailing window shares a value,
-MAD collapses to zero, and the metric most worth alerting on could never fire.
-Each metric now has a floor on its spread estimate — which doubles as a
-practical-significance gate, so a metric that normally varies by a rounding
-error does not raise an alert for varying by two rounding errors.
-
-Because window functions cannot be nested, MAD is computed by collecting the
-trailing window with `array_agg() OVER` and reducing it with list lambdas —
-exact, rather than the common shortcut of deviating from a per-row median.
-
-### Pricing lives in a table, which is what makes the simulator cheap
-
-`models` is a dimension table, not just a TypeScript constant. Asking "what
-would this traffic have cost on a different model?" is therefore a **join**, not
-a loop — so re-pricing 54,000 requests under a new scenario is one pass over the
-fact table rather than 54,000 iterations in JavaScript.
-
-The moved subset is chosen with `hash(id) % 1000`, so the same request always
-lands on the same side of a split. Nudging one slider never reshuffles which
-calls moved, and the projection settles instead of jittering.
-
-### One DuckDB connection is not a connection pool
-
-The first version shared a single connection across all requests. One request
-worked fine; two overlapping ones **deadlocked the server**, because a
-connection executes one statement at a time and each page load fans out several
-queries.
-
-Writes now go through one dedicated connection behind a mutex — two overlapping
-ingests would otherwise append the same slice twice — while readers borrow their
-own short-lived connection. Verified with 12 concurrent requests and pinned by
-`lib/db/concurrency.test.ts`.
-
-### A native dependency the bundler could not see
-
-The first deployment built green, deployed green, and returned 500 on every
-single request. Nothing in the build output hinted at it.
-
-The DuckDB platform package ships two files that matter: `duckdb.node`, the
-~1 MB N-API addon, and the engine itself as a ~35 MB shared library
-(`libduckdb.so` on Linux, `duckdb.dll` on Windows). The addon is reached
-through a static `require()`, so Next's file tracing finds it. The shared
-library is not — it is resolved by the **operating system's dynamic loader** at
-load time, and no static analysis of the module graph can see that edge.
-
-So the function shipped the 1 MB addon without the 35 MB library it links
-against. `outputFileTracingIncludes` is the only way to declare a dependency
-that never appears in the module graph:
-
-```ts
-outputFileTracingIncludes: {
-  "/api/**": ["./node_modules/@duckdb/node-bindings-*/**"],
-},
-```
-
-Two things made this take longer than it should have, and both are now fixed:
-
-- **The driver was imported at module load.** A module that fails to load never
-  reaches any error handling, so the platform returned its own opaque HTML 500
-  and the JSON error wrapper never ran. The import is now deferred to first use,
-  which moves the failure inside a request where it can be caught and reported.
-- **There was nothing to ask.** `/api/health` now reports each stage separately
-  — resolve the binding, create an instance, build the store, query it — with
-  platform, arch, Node version and region. It named the cause in one request:
-  `libduckdb.so: cannot open shared object file`.
-
-### DuckDB's defaults are host defaults
-
-Every DuckDB default is derived from the machine it starts on, which is the
-wrong machine inside a function container:
-
-| Setting | Default here | Why it breaks |
-|---|---|---|
-| `temp_directory` | `.tmp` | Relative to the working directory — `/var/task`, read-only |
-| `memory_limit` | 25 GiB | 80% of the dev machine's RAM, against a ~1 GB function |
-| `threads` | 20 | Host core count, against ~2 vCPU |
-| extension autoload | on | Would download and write extensions under a read-only `$HOME` |
-
-All four are pinned in `lib/config.ts` and overridable by environment variable.
-The workload is small enough that 512 MB and two threads are generous for it.
-
-### The "live" indicator tells the truth
-
-The earlier version polled every 5 seconds and rendered an animated "live"
-badge, while the underlying data only changed once a minute — eleven of every
-twelve responses were byte-identical. Now the server pushes over SSE only when
-the payload actually changes, and the indicator reports real `EventSource` state:
-`connecting`, `live`, `reconnecting`, `disconnected`, plus how long ago the last
-frame landed.
-
-A serverless function cannot hold a connection open indefinitely, so the stream
-would otherwise be severed mid-flight and the browser would report a network
-error — the badge would flicker for every visitor. Instead the stream retires
-itself at 50s, under a declared `maxDuration` of 60, announcing the hand-over
-with a `rotating` event first. The client holds its `live` state across an
-announced rotation and reports `reconnecting` only for genuine faults.
-
----
-
-## Honesty about the numbers
-
-A cost dashboard that overstates savings is worse than no dashboard, so the
-distinction is built into the data model rather than the copy.
-
-- **Savings are split into `measured` and `estimate`.** Re-routing savings are
-  re-priced from observed token counts against the price book — exact. The
-  prompt-caching recommendation rests on an assumption the event stream cannot
-  confirm (it carries no prompt text to diff), and is labelled and totalled
-  separately.
-- **Every routing recommendation carries its quality cost.** `qualityDelta` is
-  shown next to the dollar figure, because a saving that silently trades away
-  output quality is not a saving.
-- **The simulator separates exact from projected.** Cost is re-priced from real
-  token counts. Projected quality is an estimate from each model's baseline
-  score, and the panel says so.
-- **Recommendations operate on disjoint endpoint sets**, so summing them does
-  not double-count. Adding an overlapping recommendation would break that and
-  needs the overlap netted out first.
-
-### About the data
-
-The event stream is **simulated** — no LLM API is called and no real traffic is
-involved. It is shaped to behave like production traffic (Poisson arrivals,
-log-normal token and latency distributions, a diurnal curve, and incidents), and
-it contains deliberate inefficiencies for the analysis to find.
-
-Model pricing is **representative, not a live price book**. The figures are
-realistic and the *relationships* are what matter: output costs several times
-input, cached input is far cheaper than fresh, and a frontier model costs
-15–20× a small one for a modest quality gain.
-
----
-
-## Running it
+Use Node.js 22, the version used in CI.
 
 ```bash
-npm install
-npm run dev          # http://localhost:3000
+npm ci
+npm run dev
 ```
 
-The store backfills seven days of history on first request (~54,000 events,
-under a second) and then ingests continuously.
+Open [http://localhost:3000](http://localhost:3000). The first request backfills seven days of simulated traffic by default.
 
 ```bash
-npm run verify       # typecheck + lint + tests
-npm run test:watch   # tests in watch mode
-npm run build        # production build
+npm run verify
+npm run build
 ```
 
-### Querying the data yourself
+The tests check SQL results against an independent TypeScript implementation. CI also builds the app and verifies that a newly seeded DuckDB file can be queried. [Test suite](lib/db/reconcile.test.ts) · [CI workflow](.github/workflows/ci.yml)
 
-The dashboard's claims should be checkable without trusting the dashboard.
-`npm run seed` writes the same schema to a file you can open in the DuckDB CLI:
+**Stack** · Next.js · React · TypeScript · Tailwind CSS · Recharts · DuckDB · Vitest
 
-```bash
-npm run seed                              # 7 days, default settings
-npx tsx scripts/seed.ts --hours 24        # pass flags via tsx, not `npm run --`
-duckdb data/events.duckdb
-```
-
-```sql
--- The routing leak the Insights panel reports, found by hand.
-SELECT endpoint, model,
-       count(*)              AS calls,
-       round(sum(cost_usd),2) AS usd
-FROM v_requests
-WHERE endpoint = 'classify'
-GROUP BY 1, 2
-ORDER BY usd DESC;
-```
-
-### Configuration
-
-Everything is optional; see `.env.example`.
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `SIM_SEED` | `42` | PRNG seed — the same seed replays the same history |
-| `SIM_RATE_PER_MIN` | `8` | Nominal traffic rate, before the diurnal curve |
-| `SIM_RETENTION_HOURS` | `168` | How much history the store keeps |
-| `DUCKDB_PATH` | `:memory:` | Store location; a path persists between restarts |
-
----
-
-## Testing
-
-```
-85 unit tests   ·  6 files
-27 end-to-end checks against a production build
-```
-
-The suite is weighted toward things that are easy to get quietly wrong:
-
-- **Reconciliation** — SQL aggregation vs. the independent TypeScript
-  implementation, per bucket and per model
-- **Determinism** — the concatenation identity that incremental ingestion
-  depends on, at minute boundaries, mid-minute, and across many small slices
-- **Statistics** — median/MAD properties including "unmoved by an outlier" and
-  "not blinded by an earlier spike in its own history"
-- **Detection** — a planted incident, asserting all three metrics fire on the
-  right bucket and nothing fires on the ordinary ones
-- **Simulation** — the empty scenario must re-price to exactly the observed
-  spend, or every other projection is built on a broken foundation
-- **Concurrency** — the regression that deadlocked the server
-- **Input validation** — unknown filter values are dropped rather than matched;
-  scenario input is clamped
-
-CI runs typecheck, lint, tests and a build on every push, then seeds a DuckDB
-file and queries it back to prove the pipeline works on a clean machine.
-
----
-
-## Known limitations
-
-Stated rather than hidden, because they are the honest boundaries of a
-weekend-scale project:
-
-- **The store is per-instance.** On serverless, each cold start rebuilds its own
-  in-memory store. Fine for a demo; a real deployment would point `DUCKDB_PATH`
-  at shared storage or use MotherDuck.
-- **The stream recomputes per subscriber.** Every connected client triggers its
-  own query pass every two seconds. A shared computation fanned out to
-  subscribers would scale further.
-- **Dark theme only.** No light mode yet.
-- **Quality is synthetic.** `qualityScore` is a generated proxy, not a real
-  evaluation. Wiring in an actual eval harness is the most valuable next step.
-
----
-
-## Stack
-
-Next.js 16 (App Router) · React 19 · TypeScript 6 · Tailwind CSS v4 ·
-Recharts 3 · DuckDB 1.5 · Vitest 4
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+**License** · [MIT](LICENSE)

@@ -4,6 +4,8 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,13 +15,14 @@ import type { TimeBucket } from "@/lib/aggregate";
 import type { WindowKey } from "@/lib/api-types";
 import { MODELS } from "@/lib/models";
 import { CHART, MODEL_COLORS, MODEL_ORDER } from "@/lib/palette";
+import { formatEventTime, formatUsdAxis } from "@/lib/format";
 import { ChartTooltip } from "./chart-tooltip";
 
 function timeTick(windowKey: WindowKey) {
   return (t: number) => {
     const d = new Date(t);
     if (windowKey === "7d") {
-      return d.toLocaleDateString("en-US", { weekday: "short" });
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     }
     return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
   };
@@ -28,69 +31,84 @@ function timeTick(windowKey: WindowKey) {
 export function CostOverTime({
   data,
   windowKey,
+  selectedAt,
+  anomalyTimes,
 }: {
   data: TimeBucket[];
   windowKey: WindowKey;
+  selectedAt?: number;
+  anomalyTimes: number[];
 }) {
-  const rows = data.map((b) => ({ t: b.t, ...b.costByModel }));
   const fmtTick = timeTick(windowKey);
+  const peak = Math.max(0, ...data.map((bucket) => bucket.costUsd));
+  const markers = data.filter(({ t }) => anomalyTimes.includes(t) || t === selectedAt);
+  const ticks = windowKey === "7d" ? data.filter((_, i) => i % 8 === 0).map(({ t }) => t) : undefined;
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={rows} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
-        <defs>
-          {MODEL_ORDER.map((m) => (
-            <linearGradient key={m} id={`grad-${m}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={MODEL_COLORS[m]} stopOpacity={0.55} />
-              <stop offset="100%" stopColor={MODEL_COLORS[m]} stopOpacity={0.05} />
-            </linearGradient>
-          ))}
-        </defs>
-        <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
-        <XAxis
-          dataKey="t"
-          tickFormatter={fmtTick}
-          stroke={CHART.axis}
-          tick={{ fontSize: 11, fill: CHART.axis }}
-          tickLine={false}
-          minTickGap={40}
-        />
-        <YAxis
-          stroke={CHART.axis}
-          tick={{ fontSize: 11, fill: CHART.axis }}
-          tickLine={false}
-          axisLine={false}
-          width={44}
-          tickFormatter={(v: number) => `$${v.toFixed(0)}`}
-        />
-        <Tooltip
-          cursor={{ stroke: CHART.axis, strokeOpacity: 0.3 }}
-          content={({ active, label, payload }) => (
-            <ChartTooltip
-              active={active}
-              title={typeof label === "number" ? fmtTick(label) : undefined}
-              rows={MODEL_ORDER.map((m) => ({
-                name: MODELS[m].label,
-                color: MODEL_COLORS[m],
-                value: Number(payload?.find((p) => p.dataKey === m)?.value ?? 0),
-              }))}
-              total={(payload ?? []).reduce((s, p) => s + Number(p.value ?? 0), 0)}
-            />
-          )}
-        />
-        {MODEL_ORDER.map((m) => (
+    <div className="h-[300px] xl:h-[380px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" vertical={false} />
+          <XAxis
+            dataKey="t"
+            ticks={ticks}
+            tickFormatter={fmtTick}
+            stroke={CHART.axis}
+            tick={{ fontSize: 11, fill: CHART.axis }}
+            tickLine={false}
+            minTickGap={36}
+          />
+          <YAxis
+            stroke={CHART.axis}
+            tick={{
+              fontSize: 11,
+              fill: CHART.axis,
+              style: { fontVariantNumeric: "tabular-nums" },
+            }}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+            // Integer dollars collapsed every tick to "$0" on the 1h window, where
+            // buckets are two minutes wide.
+            tickFormatter={(v: number) => formatUsdAxis(v, peak)}
+          />
+          <Tooltip
+            cursor={{ stroke: CHART.axis, strokeOpacity: 0.3 }}
+            content={({ active, payload }) => {
+              const bucket = payload?.[0]?.payload as TimeBucket | undefined;
+              if (!bucket) return null;
+              return (
+                <ChartTooltip
+                  active={active}
+                  title={formatEventTime(bucket.t)}
+                  rows={MODEL_ORDER.map((model) => ({
+                    name: MODELS[model].label,
+                    color: MODEL_COLORS[model],
+                    value: bucket.costByModel[model],
+                  }))}
+                  total={bucket.costUsd}
+                />
+              );
+            }}
+          />
           <Area
-            key={m}
-            type="monotone"
-            dataKey={m}
-            stackId="cost"
-            stroke={MODEL_COLORS[m]}
-            strokeWidth={1.5}
-            fill={`url(#grad-${m})`}
+            type="linear"
+            dataKey="costUsd"
+            stroke="var(--accent)"
+            strokeWidth={2}
+            fill="var(--accent)"
+            fillOpacity={0.08}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: CHART.surface }}
             isAnimationActive={false}
           />
-        ))}
-      </AreaChart>
-    </ResponsiveContainer>
+          {selectedAt !== undefined && (
+            <ReferenceLine x={selectedAt} stroke="var(--warning)" strokeWidth={1.5} strokeDasharray="4 3" />
+          )}
+          {markers.map(({ t, costUsd }) => (
+            <ReferenceDot key={t} x={t} y={costUsd} r={t === selectedAt ? 5 : 3.5} fill="var(--warning)" stroke={CHART.surface} strokeWidth={1.5} />
+          ))}
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

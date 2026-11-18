@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Endpoint, ModelId } from "@/lib/types";
 import type { RoutingOverride, Scenario, ScenarioResult } from "@/lib/db/simulate";
 import { MODELS } from "@/lib/models";
 import { MODEL_COLORS, MODEL_ORDER } from "@/lib/palette";
 import { ENDPOINT_IDS } from "@/lib/db/filters";
 import { formatUsd } from "@/lib/format";
+import { RotateCcw, SlidersHorizontal } from "lucide-react";
+import { Card } from "./ui/card";
 
 /**
  * What-if simulator.
@@ -23,13 +25,22 @@ import { formatUsd } from "@/lib/format";
 
 const NONE = "__none__";
 
-export function SimulatorPanel({ queryString }: { queryString: string }) {
+export function SimulatorPanel({ queryString, preset }: { queryString: string; preset?: RoutingOverride }) {
   const [routing, setRouting] = useState<Record<string, { model: ModelId; share: number }>>({});
   const [cacheHitRate, setCacheHitRate] = useState<number | null>(null);
   const [trafficMultiplier, setTrafficMultiplier] = useState(1);
   const [result, setResult] = useState<ScenarioResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  const [appliedPreset, setAppliedPreset] = useState<RoutingOverride>();
+  if (preset !== appliedPreset) {
+    setAppliedPreset(preset);
+    if (preset) {
+      const { endpoint, targetModel, share } = preset;
+      setRouting((current) => ({ ...current, [endpoint]: { model: targetModel, share } }));
+    }
+  }
 
   const scenario: Scenario = useMemo(
     () => ({
@@ -50,13 +61,10 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
     scenario.routing.length > 0 || cacheHitRate !== null || trafficMultiplier !== 1;
 
   // Dragging a slider fires continuously; debounce so one gesture is one query.
-  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
   useEffect(() => {
     const controller = new AbortController();
-    clearTimeout(debounce.current);
 
-    debounce.current = setTimeout(() => {
+    const debounce = setTimeout(() => {
       setPending(true);
       fetch(`/api/simulate?${queryString}`, {
         method: "POST",
@@ -75,11 +83,13 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
         .catch((err: Error) => {
           if (err.name !== "AbortError") setError(err.message);
         })
-        .finally(() => setPending(false));
+        .finally(() => {
+          if (!controller.signal.aborted) setPending(false);
+        });
     }, 180);
 
     return () => {
-      clearTimeout(debounce.current);
+      clearTimeout(debounce);
       controller.abort();
     };
   }, [scenario, queryString]);
@@ -94,11 +104,17 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
   const qualityDelta = result ? result.scenarioQuality - result.baselineQuality : 0;
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <Card>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-            <span aria-hidden>🎛️</span> What-if simulator
+            <SlidersHorizontal
+              size={16}
+              strokeWidth={1.75}
+              aria-hidden
+              className="shrink-0 text-text-subtle"
+            />
+            What-if simulator
           </h2>
           <p className="mt-0.5 text-xs text-text-muted">
             Re-prices the traffic in view against the scenario below
@@ -108,8 +124,9 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
           <button
             type="button"
             onClick={reset}
-            className="rounded-md border border-border px-2 py-1 text-xs text-text-muted transition-colors hover:border-text-muted/50 hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex items-center gap-1 rounded-control border border-border px-2 py-1 text-xs text-text-muted transition-colors duration-150 hover:border-border-strong hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
+            <RotateCcw size={12} strokeWidth={1.75} aria-hidden className="shrink-0" />
             Reset
           </button>
         )}
@@ -131,6 +148,7 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
                       {endpoint}
                     </span>
                     <select
+                      aria-label={`Model for ${endpoint}`}
                       value={current?.model ?? NONE}
                       onChange={(e) => {
                         const value = e.target.value;
@@ -232,7 +250,7 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
                 {formatUsd(result.scenarioMonthlyUsd)}
               </p>
               <p className="mt-0.5 text-xs text-text-muted tabular-nums">
-                today {formatUsd(result.baselineMonthlyUsd)}
+                baseline {formatUsd(result.baselineMonthlyUsd)}
               </p>
 
               <p
@@ -338,7 +356,7 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
           )}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 

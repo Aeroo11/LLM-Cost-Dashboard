@@ -34,12 +34,14 @@ export interface MetricsResponse {
   /** Echo of the filters the server applied, after validation. */
   filters: MetricFilters;
   summary: Summary;
-  /** Percent change vs the immediately preceding window of the same length. */
+  /** Whether the store covers the entire preceding window. */
+  comparisonAvailable: boolean;
+  /** Percent change vs the preceding window. Null when a comparison is undefined. */
   deltas: {
-    totalCostPct: number;
-    requestsPct: number;
-    avgCostPct: number;
-    errorRatePct: number;
+    totalCostPct: number | null;
+    requestsPct: number | null;
+    avgCostPct: number | null;
+    errorRatePct: number | null;
   };
   insights: Insight[];
   /** Recoverable monthly spend, split by measured vs assumption-based. */

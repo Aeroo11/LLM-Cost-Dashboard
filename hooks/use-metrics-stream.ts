@@ -8,6 +8,15 @@ export type ConnectionState = "connecting" | "live" | "reconnecting" | "error";
 export interface StreamResult {
   data: MetricsResponse | null;
   status: ConnectionState;
+  /**
+   * True when `data` belongs to a previous query — the window or filters
+   * changed and the first frame for the new one has not landed yet.
+   *
+   * The frame is deliberately held rather than cleared: swapping a rendered
+   * dashboard for a skeleton on every filter click is a flash and a layout
+   * jump. Callers dim the held frame instead.
+   */
+  stale: boolean;
   /** Wall-clock time the last frame arrived, for the "updated Xs ago" label. */
   lastUpdateMs: number | null;
   error: string | null;
@@ -27,7 +36,12 @@ export interface StreamResult {
  * server sends and backs off on repeated failures.
  */
 export function useMetricsStream(queryString: string): StreamResult {
-  const [data, setData] = useState<MetricsResponse | null>(null);
+  // The frame carries the query it answered, so "is this still current?" is a
+  // comparison rather than another piece of state to keep in sync.
+  const [frame, setFrame] = useState<{
+    key: string;
+    data: MetricsResponse;
+  } | null>(null);
   const [status, setStatus] = useState<ConnectionState>("connecting");
   const [lastUpdateMs, setLastUpdateMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +59,10 @@ export function useMetricsStream(queryString: string): StreamResult {
 
     const onMetrics = (event: MessageEvent<string>) => {
       try {
-        setData(JSON.parse(event.data) as MetricsResponse);
+        setFrame({
+          key: queryString,
+          data: JSON.parse(event.data) as MetricsResponse,
+        });
         setLastUpdateMs(Date.now());
         setStatus("live");
         setError(null);
@@ -93,5 +110,11 @@ export function useMetricsStream(queryString: string): StreamResult {
     };
   }, [queryString]);
 
-  return { data, status, lastUpdateMs, error };
+  return {
+    data: frame?.data ?? null,
+    stale: frame != null && frame.key !== queryString,
+    status,
+    lastUpdateMs,
+    error,
+  };
 }

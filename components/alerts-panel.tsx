@@ -1,99 +1,85 @@
 "use client";
 
-import type { Anomaly, AnomalyMetric } from "@/lib/db/anomalies";
-import { DEFAULT_THRESHOLD } from "@/lib/anomaly";
-
-const SEVERITY_COLOR: Record<Anomaly["severity"], string> = {
-  high: "#ec835a",
-  medium: "#fab219",
-  low: "#9aa0ad",
-};
-
-const METRIC_LABEL: Record<AnomalyMetric, string> = {
-  cost: "Cost",
-  error_rate: "Errors",
-  latency_p95: "Latency",
-};
-
-function timeOf(ms: number): string {
-  return new Date(ms).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import type { Anomaly } from "@/lib/db/anomalies";
+import type { ReactNode } from "react";
+import { SEVERITY_COLOR } from "@/lib/palette";
+import { formatEventTime } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { CircleCheck, TriangleAlert } from "lucide-react";
+import { Card } from "./ui/card";
 
 export function AlertsPanel({
   anomalies,
+  selectedId,
   onSelect,
+  disabled,
+  expanded = false,
+  footer,
 }: {
   anomalies: Anomaly[];
-  /** Called with the bucket timestamp so the charts can highlight it. */
-  onSelect?: (at: number) => void;
+  selectedId?: string;
+  onSelect: (anomaly: Anomaly) => void;
+  disabled: boolean;
+  expanded?: boolean;
+  footer?: ReactNode;
 }) {
+  const rows = expanded ? anomalies : anomalies.slice(0, 3);
+
+  function row(anomaly: Anomaly) {
+    return (
+      <li key={anomaly.id}>
+        <button
+          type="button"
+          onClick={() => onSelect(anomaly)}
+          disabled={disabled}
+          aria-pressed={selectedId === anomaly.id}
+          className={cn(
+            "grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-control py-2.5 text-left enabled:hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent",
+            selectedId === anomaly.id && "bg-accent-soft",
+          )}
+        >
+          <span className="size-1.5 rounded-full" style={{ backgroundColor: SEVERITY_COLOR[anomaly.severity] }} aria-hidden />
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-text">{anomaly.title}</span>
+            <span className="mt-0.5 block text-xs text-text-muted">{formatEventTime(anomaly.at)}</span>
+            {expanded && <span className="mt-1 block text-xs leading-relaxed text-text-muted">{anomaly.detail}</span>}
+          </span>
+          <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium capitalize" style={{ color: SEVERITY_COLOR[anomaly.severity] }}>
+            {anomaly.severity}
+          </span>
+        </button>
+      </li>
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-            <span aria-hidden>🚨</span> Anomalies
-          </h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            Modified z-score vs a rolling median baseline, flagged past{" "}
-            {DEFAULT_THRESHOLD}σ
-          </p>
-        </div>
+    <Card className="self-start">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 id="anomalies-heading" tabIndex={-1} className="flex scroll-mt-4 items-center gap-2 rounded-sm text-sm font-semibold tracking-tight focus-visible:ring-2 focus-visible:ring-accent">
+          <TriangleAlert size={15} strokeWidth={1.75} aria-hidden className="shrink-0 text-warning" />
+          {expanded ? "Detected anomalies" : "Recent anomalies"}
+        </h2>
         {anomalies.length > 0 && (
-          <span className="shrink-0 rounded-full bg-danger/15 px-2 py-0.5 text-xs font-medium text-danger tabular-nums">
+          <span className="shrink-0 rounded-sm bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning tabular-nums">
             {anomalies.length}
           </span>
         )}
       </div>
 
       {anomalies.length === 0 ? (
-        <p className="py-6 text-center text-sm text-text-muted">
-          Nothing unusual in this window. ✓
+        <p className="flex items-center gap-2 pt-3 text-xs text-text-muted">
+          <CircleCheck
+            size={14}
+            strokeWidth={1.75}
+            aria-hidden
+            className="shrink-0 text-success"
+          />
+          Nothing unusual in this window.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {anomalies.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                onClick={() => onSelect?.(a.at)}
-                className="flex w-full items-start gap-3 rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-left transition-colors hover:border-text-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <span
-                  className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: SEVERITY_COLOR[a.severity] }}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="text-sm font-medium">
-                      {METRIC_LABEL[a.metric]} {a.direction}
-                    </span>
-                    <span className="font-mono text-[11px] text-text-muted">
-                      {timeOf(a.at)}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-text-muted">
-                    {a.detail}
-                  </span>
-                </span>
-                <span
-                  className="shrink-0 font-mono text-xs tabular-nums"
-                  style={{ color: SEVERITY_COLOR[a.severity] }}
-                >
-                  {a.score > 0 ? "+" : ""}
-                  {a.score.toFixed(1)}σ
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <ul className="divide-y divide-border">{rows.map(row)}</ul>
       )}
-    </div>
+      {footer && <div className="mt-1 border-t border-border pt-2">{footer}</div>}
+    </Card>
   );
 }

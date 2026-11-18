@@ -1,6 +1,6 @@
 import "server-only";
 
-import { storeHeadMs, withConnection } from "./db/client";
+import { withConnection } from "./db/client";
 import { queryEndpointMatrix, querySummary, queryTotals } from "./db/queries";
 import { queryInsights } from "./db/insights";
 import { queryAnomalies } from "./db/anomalies";
@@ -16,8 +16,8 @@ import { WINDOWS, type MetricsResponse, type WindowKey } from "./api-types";
  * `GET /api/metrics` request and the SSE stream, which re-runs it on every tick.
  */
 
-function pct(current: number, previous: number): number {
-  if (previous === 0) return 0;
+function pct(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null;
   return ((current - previous) / previous) * 100;
 }
 
@@ -54,6 +54,8 @@ export function metricsFingerprint(payload: MetricsResponse): string {
     s.totalCostUsd.toFixed(9),
     s.timeSeries.length,
     payload.anomalies.length,
+    payload.comparisonAvailable,
+    ...Object.values(payload.deltas),
   ].join(":");
 }
 
@@ -64,19 +66,20 @@ export async function buildMetrics(
 ): Promise<MetricsResponse> {
   const { bucketMinutes, hours } = WINDOWS[windowKey];
   const range = currentRange(windowKey, nowMs);
-  const windowMs = hours * 3600_000;
   const previous: TimeRange = {
-    fromMs: range.fromMs - windowMs,
-    toMs: range.toMs - windowMs,
+    fromMs: range.fromMs - (range.toMs - range.fromMs),
+    toMs: range.fromMs,
   };
 
   // One borrowed connection for the whole payload: every query below reads the
   // same snapshot, so the KPI row can never disagree with the chart beneath it.
-  const { summary, prev, insights, anomalies, endpointMatrix } = await withConnection(
-    async (connection) => {
+  const { summary, prev, insights, anomalies, endpointMatrix, ingestHeadMs } =
+    await withConnection(async (connection, coverage) => {
+      const comparisonAvailable = previous.fromMs >= coverage.fromMs
+        && previous.toMs <= coverage.toMs;
       const [summary, prev, anomalies, endpointMatrix] = await Promise.all([
         querySummary(connection, range, filters, bucketMinutes),
-        queryTotals(connection, previous, filters),
+        comparisonAvailable ? queryTotals(connection, previous, filters) : null,
         queryAnomalies(connection, range, filters, bucketMinutes),
         queryEndpointMatrix(connection, range, filters),
       ]);
@@ -87,23 +90,25 @@ export async function buildMetrics(
         filters,
         summary.burnRateMonthlyUsd,
       );
-      return { summary, prev, insights, anomalies, endpointMatrix };
-    },
-  );
+      return { summary, prev, insights, anomalies, endpointMatrix, ingestHeadMs: coverage.toMs };
+    });
 
   return {
     generatedAt: range.toMs,
-    ingestHeadMs: await storeHeadMs(),
+    ingestHeadMs,
     windowKey,
     windowHours: hours,
     range,
     filters,
     summary,
+    comparisonAvailable: prev !== null,
     deltas: {
-      totalCostPct: pct(summary.totalCostUsd, prev.totalCostUsd),
-      requestsPct: pct(summary.totalRequests, prev.totalRequests),
-      avgCostPct: pct(summary.avgCostPerRequest, prev.avgCostPerRequest),
-      errorRatePct: pct(summary.errorRate, prev.errorRate),
+      totalCostPct: prev ? pct(summary.totalCostUsd, prev.totalCostUsd) : null,
+      requestsPct: prev ? pct(summary.totalRequests, prev.totalRequests) : null,
+      avgCostPct: prev?.totalRequests && summary.totalRequests
+        ? pct(summary.avgCostPerRequest, prev.avgCostPerRequest) : null,
+      errorRatePct: prev?.totalRequests && summary.totalRequests
+        ? pct(summary.errorRate, prev.errorRate) : null,
     },
     insights,
     savings: totalMonthlySavings(insights),
