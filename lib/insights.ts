@@ -14,6 +14,7 @@ export interface Insight {
   /** Projected 30-day saving in USD if applied. */
   monthlySavingsUsd: number;
   affectedRequests: number;
+  routing?: { endpoint: Endpoint; targetModel: ModelId };
   /**
    * Whether the saving is re-priced from observed events (`measured`) or rests
    * on a stated assumption the data cannot confirm (`assumption`). Surfaced in
@@ -120,6 +121,7 @@ export function computeInsights(requests: LLMRequest[], summary: Summary): Insig
       detail: `${affected} ${endpoint} calls run on pricier models for a task ${targetSpec.label} handles at quality ${targetSpec.qualityBaseline.toFixed(2)}. Re-routing saves ≈ ${formatUsd(monthly)}/mo.`,
       monthlySavingsUsd: monthly,
       affectedRequests: affected,
+      routing: { endpoint, targetModel: target },
       basis: "measured",
       qualityDelta,
     });

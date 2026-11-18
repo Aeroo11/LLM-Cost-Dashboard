@@ -70,3 +70,12 @@ export function formatMs(ms: number): string {
 export function formatInt(n: number): string {
   return int.format(Math.round(n));
 }
+
+export function formatEventTime(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

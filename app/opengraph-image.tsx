@@ -24,9 +24,9 @@ export default function Image() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: "#0a0b0f",
+          background: "#f4f6fa",
           padding: 72,
-          color: "#e7e9ee",
+          color: "#17243c",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column" }}>
@@ -36,18 +36,18 @@ export default function Image() {
                 width: 20,
                 height: 20,
                 borderRadius: 6,
-                background: "#6366f1",
+                background: "#3053c4",
                 display: "flex",
               }}
             />
-            <div style={{ fontSize: 26, color: "#6366f1", letterSpacing: 2 }}>
+            <div style={{ fontSize: 26, color: "#3053c4", letterSpacing: 2 }}>
               TOKENWATCH
             </div>
           </div>
           <div style={{ fontSize: 82, fontWeight: 700, marginTop: 28, lineHeight: 1.05 }}>
             LLM Cost Intelligence
           </div>
-          <div style={{ fontSize: 32, color: "#9aa0ad", marginTop: 24, maxWidth: 900 }}>
+          <div style={{ fontSize: 32, color: "#4f607a", marginTop: 24, maxWidth: 900 }}>
             Live cost, usage and optimisation opportunities over a DuckDB
             analytics store — with anomaly detection and a what-if simulator.
           </div>
@@ -68,11 +68,11 @@ export default function Image() {
                     display: "flex",
                   }}
                 />
-                <div style={{ fontSize: 24, color: "#9aa0ad" }}>{MODELS[m].label}</div>
+                <div style={{ fontSize: 24, color: "#4f607a" }}>{MODELS[m].label}</div>
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 24, color: "#6b7280", display: "flex" }}>
+          <div style={{ fontSize: 24, color: "#5b6d88", display: "flex" }}>
             Next.js · DuckDB · Server-Sent Events
           </div>
         </div>

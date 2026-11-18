@@ -107,6 +107,7 @@ async function routingInsight(
     detail: `${affected} ${endpoint} calls run on pricier models for a task ${targetSpec.label} handles at quality ${targetSpec.qualityBaseline.toFixed(2)}. Re-routing saves ≈ ${formatUsd(monthly)}/mo.`,
     monthlySavingsUsd: monthly,
     affectedRequests: affected,
+    routing: { endpoint, targetModel: target },
     basis: "measured",
     qualityDelta,
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Endpoint, ModelId } from "@/lib/types";
 import type { RoutingOverride, Scenario, ScenarioResult } from "@/lib/db/simulate";
 import { MODELS } from "@/lib/models";
@@ -25,13 +25,22 @@ import { Card } from "./ui/card";
 
 const NONE = "__none__";
 
-export function SimulatorPanel({ queryString }: { queryString: string }) {
+export function SimulatorPanel({ queryString, preset }: { queryString: string; preset?: RoutingOverride }) {
   const [routing, setRouting] = useState<Record<string, { model: ModelId; share: number }>>({});
   const [cacheHitRate, setCacheHitRate] = useState<number | null>(null);
   const [trafficMultiplier, setTrafficMultiplier] = useState(1);
   const [result, setResult] = useState<ScenarioResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  const [appliedPreset, setAppliedPreset] = useState<RoutingOverride>();
+  if (preset !== appliedPreset) {
+    setAppliedPreset(preset);
+    if (preset) {
+      const { endpoint, targetModel, share } = preset;
+      setRouting((current) => ({ ...current, [endpoint]: { model: targetModel, share } }));
+    }
+  }
 
   const scenario: Scenario = useMemo(
     () => ({
@@ -52,13 +61,10 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
     scenario.routing.length > 0 || cacheHitRate !== null || trafficMultiplier !== 1;
 
   // Dragging a slider fires continuously; debounce so one gesture is one query.
-  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
   useEffect(() => {
     const controller = new AbortController();
-    clearTimeout(debounce.current);
 
-    debounce.current = setTimeout(() => {
+    const debounce = setTimeout(() => {
       setPending(true);
       fetch(`/api/simulate?${queryString}`, {
         method: "POST",
@@ -77,11 +83,13 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
         .catch((err: Error) => {
           if (err.name !== "AbortError") setError(err.message);
         })
-        .finally(() => setPending(false));
+        .finally(() => {
+          if (!controller.signal.aborted) setPending(false);
+        });
     }, 180);
 
     return () => {
-      clearTimeout(debounce.current);
+      clearTimeout(debounce);
       controller.abort();
     };
   }, [scenario, queryString]);
@@ -140,6 +148,7 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
                       {endpoint}
                     </span>
                     <select
+                      aria-label={`Model for ${endpoint}`}
                       value={current?.model ?? NONE}
                       onChange={(e) => {
                         const value = e.target.value;
@@ -241,7 +250,7 @@ export function SimulatorPanel({ queryString }: { queryString: string }) {
                 {formatUsd(result.scenarioMonthlyUsd)}
               </p>
               <p className="mt-0.5 text-xs text-text-muted tabular-nums">
-                today {formatUsd(result.baselineMonthlyUsd)}
+                baseline {formatUsd(result.baselineMonthlyUsd)}
               </p>
 
               <p

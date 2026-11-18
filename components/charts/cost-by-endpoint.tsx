@@ -87,7 +87,7 @@ export function CostByEndpoint({
           width={70}
         />
         <Tooltip
-          cursor={{ fill: "rgba(255,255,255,0.04)" }}
+          cursor={{ fill: "var(--accent-soft)" }}
           content={({ active, payload, label }) => {
             const total = (payload ?? []).reduce((s, p) => s + Number(p.value ?? 0), 0);
             return (

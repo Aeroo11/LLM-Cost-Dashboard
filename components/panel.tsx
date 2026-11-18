@@ -19,9 +19,9 @@ export function Panel({
 }) {
   return (
     <Card className={className}>
-      <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
             {Icon && (
               <Icon
                 size={16}

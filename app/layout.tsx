@@ -50,8 +50,8 @@ export const metadata: Metadata = {
 // themeColor and colorScheme belong here, not in `metadata` — they moved in
 // Next 15 and silently do nothing if left behind.
 export const viewport: Viewport = {
-  themeColor: "#0a0b0f",
-  colorScheme: "dark",
+  themeColor: "#f4f6fa",
+  colorScheme: "light",
 };
 
 export default function RootLayout({

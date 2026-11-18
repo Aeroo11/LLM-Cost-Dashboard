@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { Dashboard } from "@/components/dashboard";
-import { Card } from "@/components/ui/card";
-import { ChartSkeleton, Skeleton } from "@/components/ui/skeleton";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { ChartSkeleton, PanelSkeleton, Skeleton } from "@/components/ui/skeleton";
 
 export default function Home() {
   return (
@@ -17,44 +17,29 @@ export default function Home() {
   );
 }
 
-/**
- * Mirrors the real layout above the fold: header, filter bar, then the hero
- * KPI block as a 2x2 with the hero spanning both rows. It has to agree with
- * what the Dashboard renders in its own loading state, or the handover between
- * the two flashes.
- */
 function DashboardSkeleton() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="mt-2 h-6 w-64" />
+    <DashboardShell>
+      <div id="dashboard-main" tabIndex={-1} className="min-w-0 px-4 pb-10 sm:px-7 lg:px-8" aria-busy="true">
+        <div className="flex flex-wrap items-center justify-between gap-3 py-5 sm:py-6">
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-8 w-40" />
         </div>
-        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-[42px] w-full" />
+        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-border bg-border sm:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="bg-surface px-3.5 py-3.5 sm:px-5 sm:py-4">
+              <Skeleton className="h-3 w-20 max-w-full" />
+              <Skeleton className="mt-2 h-7 w-24 max-w-full" />
+              <Skeleton className="mt-2 h-3 w-28 max-w-full" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_304px]">
+          <ChartSkeleton height={300} className="xl:min-h-[480px]" />
+          <PanelSkeleton lines={3} />
+        </div>
       </div>
-
-      <Card padded={false} className="mt-6 px-4 py-3">
-        <Skeleton className="h-6 w-full" />
-        <Skeleton className="mt-3 h-6 w-2/3" />
-      </Card>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-2">
-        <Card className="lg:col-span-2 lg:row-span-2">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="mt-4 h-12 w-48" />
-          <Skeleton className="mt-6 h-32 w-full" />
-        </Card>
-        {[0, 1, 2, 3].map((i) => (
-          <Card key={i}>
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="mt-4 h-7 w-28" />
-            <Skeleton className="mt-3 h-3 w-32" />
-          </Card>
-        ))}
-      </div>
-
-      <ChartSkeleton height={260} className="mt-4" />
-    </div>
+    </DashboardShell>
   );
 }

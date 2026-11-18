@@ -8,41 +8,40 @@
    stays in :root, or we ship dead classes nothing purges.
    ──────────────────────────────────────────────────────────────── */
 :root {
-  /* Planes — a four-step elevation ladder. */
-  --bg: #0a0b0f;
-  --surface: #13151c;
-  --surface-2: #1a1d26;
-  --surface-3: #22262f;
-  --border: #262a35;
-  --border-strong: #333949;
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #f3f6fb;
+  --surface-3: #e7edf6;
+  --border: #dce3ee;
+  --border-strong: #b8c6da;
 
-  /* Ink — three steps, so footnotes stop borrowing opacity modifiers. */
-  --text: #e7e9ee;
-  --text-muted: #9aa0ad;
-  --text-subtle: #6b7280;
+  --text: #17243c;
+  --text-muted: #4f607a;
+  --text-subtle: #5b6d88;
 
-  --accent: #6366f1;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #ef4444;
+  --accent: #3053c4;
+  --accent-soft: #eef2ff;
+  --success: #13714d;
+  --warning: #965503;
+  --danger: #ad303c;
 
   /* Severity — the reserved *status* palette. Deliberately distinct from the
      categorical series colours so a status hue never impersonates a series,
      and distinct from --warning/--danger, which are UI chrome. Mirrored in
      lib/palette.ts for SVG; lib/palette.test.ts asserts the two agree. */
-  --sev-high: #ec835a;
-  --sev-medium: #fab219;
-  --sev-low: #9aa0ad;
+  --sev-high: #a34125;
+  --sev-medium: #88610a;
+  --sev-low: #52627a;
 
   /* Diverging pair (blue ↔ red, dark steps) for above/below-baseline bars. */
-  --div-under: #3987e5;
-  --div-over: #e66767;
+  --div-under: #3464bc;
+  --div-over: #b34452;
 
   /* Chart chrome. SVG attributes need literal hex, so lib/palette.ts owns the
      values these mirror. */
-  --chart-grid: #262a35;
-  --chart-axis: #9aa0ad;
-  --chart-ink: #e7e9ee;
+  --chart-grid: #dce3ee;
+  --chart-axis: #5b6d88;
+  --chart-ink: #17243c;
 }
 
 @theme inline {
@@ -56,6 +55,7 @@
   --color-text-muted: var(--text-muted);
   --color-text-subtle: var(--text-subtle);
   --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -69,11 +69,9 @@
   --radius-panel: 0.875rem;
   --radius-control: 0.5rem;
 
-  /* Elevation. On a dark plane a drop shadow alone reads as mud; the inset
-     top highlight is what actually creates the raised read. */
-  --shadow-panel: inset 0 1px 0 0 rgb(255 255 255 / 0.03), 0 1px 2px 0 rgb(0 0 0 / 0.4);
-  --shadow-raised: inset 0 1px 0 0 rgb(255 255 255 / 0.05), 0 12px 32px -8px rgb(0 0 0 / 0.65);
-  --shadow-pop: 0 16px 40px -12px rgb(0 0 0 / 0.8);
+  --shadow-panel: 0 1px 2px 0 rgb(23 36 60 / 0.045);
+  --shadow-raised: 0 12px 32px -12px rgb(23 36 60 / 0.16);
+  --shadow-pop: 0 12px 32px -8px rgb(23 36 60 / 0.20);
 
   /* Type scale. --text-eyebrow replaces the scattered text-[10px]/text-[11px]. */
   --text-hero: 3rem;
@@ -118,7 +116,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -128,8 +126,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Also neuters the live indicator's animate-ping, which is the one piece of
-   motion that runs indefinitely. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

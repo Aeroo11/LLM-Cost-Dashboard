@@ -44,6 +44,8 @@ interface Store {
   instance: DuckDBInstance;
   /** Reserved for ingest and pruning. Never handed to query code. */
   writer: DuckDBConnection;
+  /** Beginning of known history, independent of whether that instant has an event. */
+  startMs: number;
   /**
    * Exclusive upper bound of ingested data, to the millisecond.
    *
@@ -155,24 +157,27 @@ async function createStore(): Promise<Store> {
 
   // A persisted store may already hold history; only backfill what's missing.
   const existing = await writer.runAndReadAll(
-    "SELECT CAST(coalesce(epoch_ms(max(ts)), 0) AS BIGINT) AS head FROM requests",
+    `SELECT CAST(epoch_ms(min(ts)) AS BIGINT) AS start,
+            CAST(epoch_ms(max(ts)) AS BIGINT) AS head FROM requests`,
   );
-  const persistedHead = Number(
-    (existing.getRowObjects()[0]?.head as bigint | undefined) ?? 0n,
-  );
+  const persisted = existing.getRowObjects()[0];
+  const persistedHead = Number(persisted?.head ?? 0);
 
   const now = Date.now();
   const horizon = now - RETENTION_HOURS * 3600_000;
   // Resume from just after the newest persisted event, unless the file is so
   // stale that everything in it has already aged out.
   const from = persistedHead > horizon ? persistedHead + 1 : horizon;
+  const startMs = persistedHead > horizon
+    ? Math.max(horizon, Number(persisted?.start ?? horizon))
+    : horizon;
 
   await appendRequests(
     writer,
     generateRange({ from, to: now, ratePerMin: RATE_PER_MIN, seed: SEED }),
   );
 
-  return { instance, writer, headMs: now };
+  return { instance, writer, startMs, headMs: now };
 }
 
 /**
@@ -221,9 +226,11 @@ async function refresh(store: Store): Promise<Store> {
     store.headMs = now;
 
     if (now - lastPruneMs >= PRUNE_INTERVAL_MS) {
+      const cutoff = now - RETENTION_HOURS * 3600_000;
       await store.writer.run("DELETE FROM requests WHERE ts < epoch_ms($1::BIGINT)", [
-        now - RETENTION_HOURS * 3600_000,
+        cutoff,
       ]);
+      store.startMs = Math.max(store.startMs, cutoff);
       lastPruneMs = now;
     }
   });
@@ -237,24 +244,17 @@ async function refresh(store: Store): Promise<Store> {
  * requests share one backfill instead of racing to build several.
  */
 export async function withConnection<T>(
-  fn: (connection: DuckDBConnection) => Promise<T>,
+  fn: (connection: DuckDBConnection, coverage: { fromMs: number; toMs: number }) => Promise<T>,
 ): Promise<T> {
   if (!g[STORE_KEY]) g[STORE_KEY] = createStore();
   const store = await refresh(await g[STORE_KEY]);
 
   const connection = await store.instance.connect();
   try {
-    return await fn(connection);
+    return await fn(connection, { fromMs: store.startMs, toMs: store.headMs });
   } finally {
     connection.closeSync();
   }
-}
-
-/** Epoch ms of the newest ingested minute — the stream's "as of" marker. */
-export async function storeHeadMs(): Promise<number> {
-  if (!g[STORE_KEY]) g[STORE_KEY] = createStore();
-  const store = await refresh(await g[STORE_KEY]);
-  return store.headMs;
 }
 
 /** Test/CLI helper: an isolated in-memory store over a fixed range. */

@@ -20,19 +20,19 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#13151c",
+          background: "#3053c4",
         }}
       >
         <svg width="180" height="180" viewBox="0 0 32 32">
           <path
             d="M5 23 L11 17 L16 20 L27 8"
             fill="none"
-            stroke="#6366f1"
+            stroke="#ffffff"
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="27" cy="8" r="3.2" fill="#6366f1" />
+          <circle cx="27" cy="8" r="3.2" fill="#ffffff" />
         </svg>
       </div>
     ),

@@ -26,12 +26,32 @@ function parseInt10(raw: string | null, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function parseTimestamp(raw: string | null): number | null {
+  if (raw === null || !/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
 export function GET(req: NextRequest) {
+  const params = req.nextUrl.searchParams;
+  const fromMs = parseTimestamp(params.get("from"));
+  const toMs = parseTimestamp(params.get("to"));
+  const bounded = params.has("from") || params.has("to");
+  if (bounded && (fromMs === null || toMs === null || fromMs >= toMs)) {
+    return NextResponse.json(
+      { error: "InvalidRange", message: "Provide an ordered from and to in epoch milliseconds." },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   return withErrorReporting<RequestPage>(async () => {
-    const params = req.nextUrl.searchParams;
     const windowKey = parseWindowKey(params.get("window"));
     const filters = parseFilters(params);
     const range = currentRange(windowKey);
+    if (fromMs !== null && toMs !== null) {
+      range.fromMs = Math.max(range.fromMs, fromMs);
+      range.toMs = Math.min(range.toMs, toMs);
+    }
 
     const page = await withConnection((connection) =>
       queryRequests(connection, range, filters, {
